@@ -9,17 +9,17 @@ export default async function EditDomainPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: domain } = await supabase
-    .from("domains")
-    .select("id, publisher_id, domain_site_id, display_name")
-    .eq("id", id)
-    .single();
+  const [domainRes, publishersRes] = await Promise.all([
+    supabase
+      .from("domains")
+      .select("id, publisher_id, domain_site_id, display_name")
+      .eq("id", id)
+      .single(),
+    supabase.from("publishers").select("id, name").order("name"),
+  ]);
+  const domain = domainRes.data;
+  const publishers = publishersRes.data;
   if (!domain) notFound();
-
-  const { data: publishers } = await supabase
-    .from("publishers")
-    .select("id, name")
-    .order("name");
 
   return (
     <div>

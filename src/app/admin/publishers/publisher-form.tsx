@@ -10,12 +10,15 @@ type Publisher = {
   email: string;
   revenue_share_pct: number;
   status: "active" | "suspended";
+  phone?: string | null;
 };
 
 export function PublisherForm({ publisher }: { publisher?: Publisher }) {
   const router = useRouter();
   const [name, setName] = useState(publisher?.name ?? "");
   const [email, setEmail] = useState(publisher?.email ?? "");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState(publisher?.phone ?? "");
   const [revenueShare, setRevenueShare] = useState(
     String(publisher?.revenue_share_pct ?? 70)
   );
@@ -28,6 +31,10 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!publisher && (!password || password.length < 8)) {
+      setError("Password is required and must be at least 8 characters");
+      return;
+    }
     setLoading(true);
     const url = publisher
       ? `/api/admin/publishers/${publisher.id}`
@@ -38,6 +45,8 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
       body: JSON.stringify({
         name,
         email,
+        password: !publisher ? password : undefined,
+        phone: phone.trim() || null,
         revenue_share_pct: Number(revenueShare),
         status,
       }),
@@ -82,6 +91,34 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
           <p className="text-xs text-gray-700 mt-1">Email cannot be changed.</p>
         )}
       </div>
+      {!publisher && (
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-1">
+            Password
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            placeholder="Min 8 characters (publisher will use this to log in)"
+            className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
+          />
+        </div>
+      )}
+      <div>
+        <label className="block text-sm font-medium text-gray-900 mb-1">
+          Phone (optional)
+        </label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="e.g. +1234567890"
+          className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
+        />
+      </div>
       <div>
         <label className="block text-sm font-medium text-gray-900 mb-1">
           Revenue share %
@@ -90,9 +127,16 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
           type="number"
           min={0}
           max={100}
-          step={0.01}
+          step={1}
           value={revenueShare}
-          onChange={(e) => setRevenueShare(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "") setRevenueShare("");
+            else {
+              const n = Number(v);
+              if (!Number.isNaN(n)) setRevenueShare(String(Math.min(100, Math.max(0, Math.round(n)))));
+            }
+          }}
           required
           className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
         />

@@ -3,15 +3,17 @@ import Link from "next/link";
 
 export default async function AdminOverviewPage() {
   const supabase = await createClient();
-  const { count: publishersCount } = await supabase
-    .from("publishers")
-    .select("*", { count: "exact", head: true });
-  const { data: configs } = await supabase
-    .from("monthly_config")
-    .select("month, year, expected_revenue, real_data_imported_at")
-    .order("year", { ascending: false })
-    .order("month", { ascending: false })
-    .limit(5);
+  const [countRes, configsRes] = await Promise.all([
+    supabase.from("publishers").select("*", { count: "exact", head: true }),
+    supabase
+      .from("monthly_config")
+      .select("month, year, expected_revenue, real_data_imported_at")
+      .order("year", { ascending: false })
+      .order("month", { ascending: false })
+      .limit(5),
+  ]);
+  const publishersCount = countRes.count;
+  const configs = configsRes.data;
 
   return (
     <div>

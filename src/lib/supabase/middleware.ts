@@ -23,35 +23,20 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() validates JWT locally when using asymmetric signing keys (no Auth server call)
+  const { data: claims, error: claimsError } = await supabase.auth.getClaims();
+
+  const hasValidSession = !claimsError && claims?.claims?.sub;
 
   const pathname = request.nextUrl.pathname;
 
-  if (!user) {
-    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
+  if (!hasValidSession) {
+    if (
+      pathname === "/" ||
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/dashboard")
+    ) {
       return NextResponse.redirect(new URL("/login", request.url));
-    }
-    return response;
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  const role = profile?.role ?? "publisher";
-
-  if (pathname.startsWith("/admin")) {
-    if (role !== "super_admin") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-  }
-  if (pathname.startsWith("/dashboard")) {
-    if (role === "super_admin") {
-      return NextResponse.redirect(new URL("/admin", request.url));
     }
   }
 

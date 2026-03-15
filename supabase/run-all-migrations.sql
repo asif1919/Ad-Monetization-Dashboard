@@ -10,6 +10,7 @@ CREATE TABLE public.publishers (
   email TEXT NOT NULL UNIQUE,
   revenue_share_pct DECIMAL(5,2) NOT NULL DEFAULT 70 CHECK (revenue_share_pct >= 0 AND revenue_share_pct <= 100),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+  phone TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -6,7 +6,7 @@ export default async function PublishersPage() {
   const supabase = await createClient();
   const { data: publishers } = await supabase
     .from("publishers")
-    .select("id, name, email, revenue_share_pct, status, created_at")
+    .select("id, name, email, phone, revenue_share_pct, status, created_at")
     .order("name");
 
   return (
@@ -26,6 +26,7 @@ export default async function PublishersPage() {
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="text-left p-3">Name</th>
               <th className="text-left p-3">Email</th>
+              <th className="text-left p-3">Phone</th>
               <th className="text-left p-3">Revenue share %</th>
               <th className="text-left p-3">Status</th>
               <th className="text-left p-3">Actions</th>
@@ -36,6 +37,7 @@ export default async function PublishersPage() {
               <tr key={p.id} className="border-b border-gray-100">
                 <td className="p-3 font-medium">{p.name}</td>
                 <td className="p-3 text-gray-600">{p.email}</td>
+                <td className="p-3 text-gray-600">{p.phone ?? "—"}</td>
                 <td className="p-3">{Number(p.revenue_share_pct)}%</td>
                 <td className="p-3">
                   <span

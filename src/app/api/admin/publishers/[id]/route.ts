@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createServerAdminClient } from "@/lib/supabase/server-admin";
 import { NextResponse } from "next/server";
 
 export async function PATCH(
@@ -54,10 +55,11 @@ export async function PUT(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { name, revenue_share_pct, status } = body as {
+  const { name, revenue_share_pct, status, phone } = body as {
     name?: string;
     revenue_share_pct?: number;
     status?: string;
+    phone?: string | null;
   };
   if (!name) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
@@ -74,6 +76,7 @@ export async function PUT(
   };
   if (share != null) updates.revenue_share_pct = share;
   if (status === "active" || status === "suspended") updates.status = status;
+  if (phone !== undefined) updates.phone = phone || null;
 
   const { error } = await supabase
     .from("publishers")
@@ -81,5 +84,48 @@ export async function PUT(
     .eq("id", id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: publisherId } = await params;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+  if (profile?.role !== "super_admin")
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const admin = createServerAdminClient();
+
+  const { data: linkedProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("publisher_id", publisherId)
+    .maybeSingle();
+
+  if (linkedProfile?.id) {
+    const { error: deleteUserError } = await admin.auth.admin.deleteUser(linkedProfile.id);
+    if (deleteUserError) {
+      return NextResponse.json({ error: deleteUserError.message }, { status: 500 });
+    }
+  }
+
+  const { error: deleteError } = await admin
+    .from("publishers")
+    .delete()
+    .eq("id", publisherId);
+
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

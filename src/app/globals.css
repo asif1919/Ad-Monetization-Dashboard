@@ -7,20 +7,14 @@
   --foreground: #171717;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Keep app in light theme so text is always readable on light backgrounds */
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: system-ui, -apple-system, sans-serif;
 }
 
-/* Input and placeholder text always visible */
+/* Input and placeholder text always visible (app is light theme) */
 input,
 select,
 textarea {
@@ -35,19 +29,24 @@ select:disabled,
 textarea:disabled {
   color: #374151;
 }
-@media (prefers-color-scheme: dark) {
-  input,
-  select,
-  textarea {
-    color: #f3f4f6;
-  }
-  input::placeholder,
-  textarea::placeholder {
-    color: #9ca3af;
-  }
-  input:disabled,
-  select:disabled,
-  textarea:disabled {
-    color: #d1d5db;
-  }
+/* Prevent browser autofill from hiding text */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #111827;
+  box-shadow: 0 0 0 1000px white inset;
+}
+
+/* Loading spinner for route transitions */
+@keyframes loading-spin {
+  to { transform: rotate(360deg); }
+}
+.loading-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: loading-spin 0.7s linear infinite;
 }

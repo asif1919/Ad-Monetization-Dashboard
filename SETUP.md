@@ -38,13 +38,22 @@ Open http://localhost:3000 → **Login** with the email and password from Step 2
 ## Optional: Add a publisher and test the publisher dashboard
 
 1. In **Admin** → **Publishers**, click **Add publisher**.  
-2. Enter name, email (use another email you can sign in with), and revenue share %. Save.  
-3. In **Authentication** → **Users**, create a **second** user with that same email.  
-4. Sign out, then sign in with that second user. You should see the **Publisher Dashboard** (overview, reports, payments).
+2. Enter name, email, **password** (min 8 characters), and optionally phone and revenue share %. Save.  
+3. The publisher can log in immediately with that email and password. Sign out, then sign in as the publisher to see the **Publisher Dashboard** (overview, reports, payments).
+
+---
+
+## Optional: Add phone column (existing databases)
+
+If you ran the migrations before the phone field was added, run this in SQL Editor once:
+
+```sql
+ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS phone TEXT;
+```
 
 ---
 
 **Credentials (already set in `.env.local`):**
 
 - URL: `https://wszemcsubafjfuzcyuoa.supabase.co`  
-- Anon key and service role are in `.env.local` (do not commit).
+- Anon key and **SUPABASE_SERVICE_ROLE_KEY** (required for creating publishers with login and for delete publisher). Do not commit `.env.local`.

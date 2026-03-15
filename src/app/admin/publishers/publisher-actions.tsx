@@ -18,6 +18,22 @@ export function PublisherActions({ publisherId, status, name }: Props) {
     if (res.ok) router.refresh();
   }
 
+  async function deletePublisher() {
+    const ok = confirm(
+      `Delete publisher "${name}"? Their login will be removed and all related data (domains, stats, payouts, invoices) will be deleted. This cannot be undone.`
+    );
+    if (!ok) return;
+    const res = await fetch(`/api/admin/publishers/${publisherId}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      router.refresh();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Failed to delete");
+    }
+  }
+
   return (
     <span className="flex items-center gap-2">
       <Link
@@ -32,6 +48,13 @@ export function PublisherActions({ publisherId, status, name }: Props) {
         className="text-amber-600 hover:underline"
       >
         {status === "active" ? "Suspend" : "Activate"}
+      </button>
+      <button
+        type="button"
+        onClick={deletePublisher}
+        className="text-red-600 hover:underline"
+      >
+        Delete
       </button>
     </span>
   );
