@@ -1,0 +1,23 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# env (never commit secrets)
+.env
+.env*.local
+.env.local
+
+# next
+.next
+out
+
+# misc
+.DS_Store
+*.pem
+debug.log
+npm-debug.log*
+
+# IDE
+.idea
+.vscode

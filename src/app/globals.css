@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Input and placeholder text always visible */
+input,
+select,
+textarea {
+  color: #111827;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #4b5563;
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  color: #374151;
+}
+@media (prefers-color-scheme: dark) {
+  input,
+  select,
+  textarea {
+    color: #f3f4f6;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+  }
+  input:disabled,
+  select:disabled,
+  textarea:disabled {
+    color: #d1d5db;
+  }
+}
