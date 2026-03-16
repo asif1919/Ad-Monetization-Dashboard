@@ -3,6 +3,7 @@
 
 -- ========== 1. Schema ==========
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE public.publishers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -106,6 +107,12 @@ CREATE INDEX idx_domains_publisher ON public.domains(publisher_id);
 CREATE INDEX idx_domains_site_id ON public.domains(domain_site_id);
 CREATE INDEX idx_payouts_publisher ON public.payouts(publisher_id);
 CREATE INDEX idx_invoices_publisher ON public.invoices(publisher_id);
+CREATE INDEX IF NOT EXISTS idx_publishers_name_trgm
+  ON public.publishers
+  USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_publishers_email_trgm
+  ON public.publishers
+  USING gin (email gin_trgm_ops);
 
 -- ========== 2. RLS ==========
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -167,7 +174,13 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- ========== 4. Storage buckets and policies ==========
+-- ========== 4. Publishers additional columns ==========
+-- Phone (already added if you ran 00005)
+ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS phone TEXT;
+-- Website URL assigned by admin when creating publisher
+ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS website_url TEXT;
+
+-- ========== 5. Storage buckets and policies ==========
 -- If INSERT fails, create buckets in Dashboard: Storage -> New bucket -> excel-imports (private), invoices (private)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('excel-imports', 'excel-imports', false), ('invoices', 'invoices', false)

@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast-provider";
+import { mapAuthError } from "@/lib/errors/auth";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -10,6 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+  const { show } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,9 +25,15 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (err) {
-      setError(err.message);
+      const friendly = mapAuthError(err.message);
+      setError(friendly);
       return;
     }
+    show({
+      type: "success",
+      title: "Welcome back!",
+      description: "You\u2019re now signed in.",
+    });
     router.refresh();
     router.push("/");
   }

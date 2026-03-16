@@ -18,13 +18,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { name, email, password, revenue_share_pct, status, phone } = body as {
+  const { name, email, password, revenue_share_pct, status, phone, website_url } = body as {
     name?: string;
     email?: string;
     password?: string;
     revenue_share_pct?: number;
     status?: string;
     phone?: string | null;
+    website_url?: string | null;
   };
   if (!name || !email)
     return NextResponse.json(
@@ -69,6 +70,7 @@ export async function POST(request: Request) {
       revenue_share_pct: share,
       status: status === "suspended" ? "suspended" : "active",
       phone: phone || null,
+      website_url: website_url || null,
     })
     .select("id")
     .single();

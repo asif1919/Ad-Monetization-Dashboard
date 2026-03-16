@@ -11,7 +11,7 @@ export default async function EditPublisherPage({
   const supabase = await createClient();
   const { data: publisher } = await supabase
     .from("publishers")
-    .select("id, name, email, phone, revenue_share_pct, status")
+    .select("id, name, email, phone, website_url, revenue_share_pct, status")
     .eq("id", id)
     .single();
 
@@ -28,6 +28,7 @@ export default async function EditPublisherPage({
           name: publisher.name,
           email: publisher.email,
           phone: publisher.phone ?? undefined,
+          website_url: publisher.website_url ?? undefined,
           revenue_share_pct: Number(publisher.revenue_share_pct),
           status: publisher.status as "active" | "suspended",
         }}

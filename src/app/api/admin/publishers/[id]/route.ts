@@ -55,11 +55,12 @@ export async function PUT(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { name, revenue_share_pct, status, phone } = body as {
+  const { name, revenue_share_pct, status, phone, website_url } = body as {
     name?: string;
     revenue_share_pct?: number;
     status?: string;
     phone?: string | null;
+    website_url?: string | null;
   };
   if (!name) return NextResponse.json({ error: "Name required" }, { status: 400 });
 
@@ -77,6 +78,7 @@ export async function PUT(
   if (share != null) updates.revenue_share_pct = share;
   if (status === "active" || status === "suspended") updates.status = status;
   if (phone !== undefined) updates.phone = phone || null;
+  if (website_url !== undefined) updates.website_url = website_url || null;
 
   const { error } = await supabase
     .from("publishers")

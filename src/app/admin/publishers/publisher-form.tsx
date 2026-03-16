@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useToast } from "@/components/ui/toast-provider";
 
 type Publisher = {
   id: string;
@@ -11,6 +12,7 @@ type Publisher = {
   revenue_share_pct: number;
   status: "active" | "suspended";
   phone?: string | null;
+  website_url?: string | null;
 };
 
 export function PublisherForm({ publisher }: { publisher?: Publisher }) {
@@ -19,6 +21,7 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
   const [email, setEmail] = useState(publisher?.email ?? "");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState(publisher?.phone ?? "");
+   const [websiteUrl, setWebsiteUrl] = useState(publisher?.website_url ?? "");
   const [revenueShare, setRevenueShare] = useState(
     String(publisher?.revenue_share_pct ?? 70)
   );
@@ -27,6 +30,7 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { show } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,6 +51,7 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
         email,
         password: !publisher ? password : undefined,
         phone: phone.trim() || null,
+        website_url: websiteUrl.trim() || null,
         revenue_share_pct: Number(revenueShare),
         status,
       }),
@@ -55,8 +60,18 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
     setLoading(false);
     if (!res.ok) {
       setError(data.error ?? "Failed to save");
+      show({
+        type: "error",
+        title: "Could not save publisher",
+        description: data.error ?? "Please check the form and try again.",
+      });
       return;
     }
+    show({
+      type: "success",
+      title: publisher ? "Publisher updated" : "Publisher created",
+      description: "Your changes have been applied.",
+    });
     router.push("/admin/publishers");
     router.refresh();
   }
@@ -116,6 +131,18 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="e.g. +1234567890"
+          className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-900 mb-1">
+          Website URL (optional)
+        </label>
+        <input
+          type="url"
+          value={websiteUrl}
+          onChange={(e) => setWebsiteUrl(e.target.value)}
+          placeholder="https://publisher-site.com"
           className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
         />
       </div>

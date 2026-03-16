@@ -16,6 +16,7 @@ export interface Publisher {
   revenue_share_pct: number;
   status: "active" | "suspended";
   phone: string | null;
+  website_url: string | null;
   created_at: string;
   updated_at: string;
 }

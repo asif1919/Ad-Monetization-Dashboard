@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast-provider";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 type Props = { publisherId: string; status: string; name: string };
 
 export function PublisherActions({ publisherId, status, name }: Props) {
   const router = useRouter();
+  const { show } = useToast();
 
   async function toggleSuspend() {
     const newStatus = status === "active" ? "suspended" : "active";
@@ -15,22 +18,38 @@ export function PublisherActions({ publisherId, status, name }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: newStatus }),
     });
-    if (res.ok) router.refresh();
+    if (res.ok) {
+      show({
+        type: "success",
+        title: newStatus === "active" ? "Publisher activated" : "Publisher suspended",
+      });
+      router.refresh();
+    } else {
+      show({
+        type: "error",
+        title: "Could not update status",
+      });
+    }
   }
 
-  async function deletePublisher() {
-    const ok = confirm(
-      `Delete publisher "${name}"? Their login will be removed and all related data (domains, stats, payouts, invoices) will be deleted. This cannot be undone.`
-    );
-    if (!ok) return;
+  async function deletePublisherRequest() {
     const res = await fetch(`/api/admin/publishers/${publisherId}`, {
       method: "DELETE",
     });
     if (res.ok) {
+      show({
+        type: "success",
+        title: "Publisher deleted",
+        description: "The publisher and related data have been removed.",
+      });
       router.refresh();
     } else {
       const data = await res.json().catch(() => ({}));
-      alert(data.error ?? "Failed to delete");
+      show({
+        type: "error",
+        title: "Failed to delete publisher",
+        description: data.error ?? "Please try again.",
+      });
     }
   }
 
@@ -49,13 +68,23 @@ export function PublisherActions({ publisherId, status, name }: Props) {
       >
         {status === "active" ? "Suspend" : "Activate"}
       </button>
-      <button
-        type="button"
-        onClick={deletePublisher}
-        className="text-red-600 hover:underline"
-      >
-        Delete
-      </button>
+      <ConfirmDialog
+        title="Delete publisher?"
+        message={`Delete publisher "${name}"? Their login will be removed and all related data (domains, stats, payouts, invoices) will be deleted. This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={deletePublisherRequest}
+        trigger={(open) => (
+          <button
+            type="button"
+            onClick={open}
+            className="text-red-600 hover:underline"
+          >
+            Delete
+          </button>
+        )}
+      />
     </span>
   );
 }
+
