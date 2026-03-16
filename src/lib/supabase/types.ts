@@ -17,6 +17,8 @@ export interface Publisher {
   status: "active" | "suspended";
   phone: string | null;
   website_url: string | null;
+  allow_adult: boolean;
+  allow_gambling: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -89,5 +91,25 @@ export interface ImportLog {
   imported_rows: number;
   unmatched_data: unknown[];
   errors: unknown[];
+  created_at: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  publisher_id: string;
+  subject: string;
+  message: string;
+  status: "open" | "closed";
+  created_at: string;
+  updated_at: string;
+  publisher_last_seen_at?: string | null;
+  admin_last_seen_at?: string | null;
+}
+
+export interface SupportMessage {
+  id: string;
+  ticket_id: string;
+  sender_type: "publisher" | "admin";
+  body: string;
   created_at: string;
 }

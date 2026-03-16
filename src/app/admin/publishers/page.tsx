@@ -14,7 +14,9 @@ export default async function PublishersPage({
 
   let query = supabase
     .from("publishers")
-    .select("id, name, email, phone, website_url, revenue_share_pct, status, created_at");
+    .select(
+      "id, name, email, phone, website_url, revenue_share_pct, status, allow_adult, allow_gambling, created_at"
+    );
 
   const search = q?.trim();
   if (search) {
@@ -47,6 +49,7 @@ export default async function PublishersPage({
               <th className="text-left p-3">Email</th>
               <th className="text-left p-3">Phone</th>
               <th className="text-left p-3">Website</th>
+              <th className="text-left p-3">Policies</th>
               <th className="text-left p-3">Revenue share %</th>
               <th className="text-left p-3">Status</th>
               <th className="text-left p-3">Actions</th>
@@ -71,6 +74,15 @@ export default async function PublishersPage({
                   ) : (
                     "—"
                   )}
+                </td>
+                <td className="p-3 text-xs text-gray-700">
+                  <span className={p.allow_adult ? "text-green-700" : "text-gray-500"}>
+                    Adult: {p.allow_adult ? "ON" : "OFF"}
+                  </span>
+                  <br />
+                  <span className={p.allow_gambling ? "text-green-700" : "text-gray-500"}>
+                    Gambling: {p.allow_gambling ? "ON" : "OFF"}
+                  </span>
                 </td>
                 <td className="p-3">{Number(p.revenue_share_pct)}%</td>
                 <td className="p-3">

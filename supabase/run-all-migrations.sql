@@ -12,6 +12,8 @@ CREATE TABLE public.publishers (
   revenue_share_pct DECIMAL(5,2) NOT NULL DEFAULT 70 CHECK (revenue_share_pct >= 0 AND revenue_share_pct <= 100),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
   phone TEXT,
+  allow_adult BOOLEAN NOT NULL DEFAULT false,
+  allow_gambling BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -158,6 +160,68 @@ CREATE POLICY "Publishers read own invoices" ON public.invoices FOR SELECT USING
 
 CREATE POLICY "Super admin only import_logs" ON public.import_logs FOR ALL USING (public.is_super_admin());
 
+CREATE TABLE IF NOT EXISTS public.support_tickets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  publisher_id UUID NOT NULL REFERENCES public.publishers(id) ON DELETE CASCADE,
+  subject TEXT NOT NULL,
+  message TEXT NOT NULL,
+  admin_reply TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  publisher_last_seen_at TIMESTAMPTZ,
+  admin_last_seen_at TIMESTAMPTZ
+);
+
+ALTER TABLE public.support_tickets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Publishers own tickets select" ON public.support_tickets
+  FOR SELECT USING (publisher_id = public.current_publisher_id());
+
+CREATE POLICY "Publishers own tickets insert" ON public.support_tickets
+  FOR INSERT WITH CHECK (publisher_id = public.current_publisher_id());
+
+CREATE POLICY "Super admin full support_tickets" ON public.support_tickets
+  FOR ALL USING (public.is_super_admin());
+
+-- Support ticket threaded messages
+CREATE TABLE IF NOT EXISTS public.support_messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  ticket_id UUID NOT NULL REFERENCES public.support_tickets(id) ON DELETE CASCADE,
+  sender_type TEXT NOT NULL CHECK (sender_type IN ('publisher', 'admin')),
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Publishers own support_messages"
+  ON public.support_messages
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM public.support_tickets t
+      WHERE t.id = ticket_id
+        AND t.publisher_id = public.current_publisher_id()
+    )
+  );
+
+CREATE POLICY "Publishers insert support_messages"
+  ON public.support_messages
+  FOR INSERT WITH CHECK (
+    sender_type = 'publisher'
+    AND EXISTS (
+      SELECT 1
+      FROM public.support_tickets t
+      WHERE t.id = ticket_id
+        AND t.publisher_id = public.current_publisher_id()
+    )
+  );
+
+CREATE POLICY "Super admin full support_messages"
+  ON public.support_messages
+  FOR ALL USING (public.is_super_admin());
+
 -- ========== 3. Profile trigger ==========
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
@@ -179,6 +243,10 @@ CREATE TRIGGER on_auth_user_created
 ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS phone TEXT;
 -- Website URL assigned by admin when creating publisher
 ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS website_url TEXT;
+
+-- Policy flags
+ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS allow_adult BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS allow_gambling BOOLEAN NOT NULL DEFAULT false;
 
 -- ========== 5. Storage buckets and policies ==========
 -- If INSERT fails, create buckets in Dashboard: Storage -> New bucket -> excel-imports (private), invoices (private)

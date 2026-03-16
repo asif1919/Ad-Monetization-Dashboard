@@ -18,7 +18,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { name, email, password, revenue_share_pct, status, phone, website_url } = body as {
+  const {
+    name,
+    email,
+    password,
+    revenue_share_pct,
+    status,
+    phone,
+    website_url,
+    allow_adult,
+    allow_gambling,
+  } = body as {
     name?: string;
     email?: string;
     password?: string;
@@ -26,6 +36,8 @@ export async function POST(request: Request) {
     status?: string;
     phone?: string | null;
     website_url?: string | null;
+    allow_adult?: boolean;
+    allow_gambling?: boolean;
   };
   if (!name || !email)
     return NextResponse.json(
@@ -71,6 +83,8 @@ export async function POST(request: Request) {
       status: status === "suspended" ? "suspended" : "active",
       phone: phone || null,
       website_url: website_url || null,
+      allow_adult: !!allow_adult,
+      allow_gambling: !!allow_gambling,
     })
     .select("id")
     .single();

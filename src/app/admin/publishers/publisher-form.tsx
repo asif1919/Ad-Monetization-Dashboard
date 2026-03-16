@@ -13,6 +13,8 @@ type Publisher = {
   status: "active" | "suspended";
   phone?: string | null;
   website_url?: string | null;
+  allow_adult?: boolean;
+  allow_gambling?: boolean;
 };
 
 export function PublisherForm({ publisher }: { publisher?: Publisher }) {
@@ -21,12 +23,16 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
   const [email, setEmail] = useState(publisher?.email ?? "");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState(publisher?.phone ?? "");
-   const [websiteUrl, setWebsiteUrl] = useState(publisher?.website_url ?? "");
+  const [websiteUrl, setWebsiteUrl] = useState(publisher?.website_url ?? "");
   const [revenueShare, setRevenueShare] = useState(
     String(publisher?.revenue_share_pct ?? 70)
   );
   const [status, setStatus] = useState<"active" | "suspended">(
     publisher?.status ?? "active"
+  );
+  const [allowAdult, setAllowAdult] = useState<boolean>(publisher?.allow_adult ?? false);
+  const [allowGambling, setAllowGambling] = useState<boolean>(
+    publisher?.allow_gambling ?? false
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +60,8 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
         website_url: websiteUrl.trim() || null,
         revenue_share_pct: Number(revenueShare),
         status,
+        allow_adult: allowAdult,
+        allow_gambling: allowGambling,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -167,6 +175,26 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
           required
           className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
         />
+      </div>
+      <div className="flex gap-4">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-900">
+          <input
+            type="checkbox"
+            checked={allowAdult}
+            onChange={(e) => setAllowAdult(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span>Allow adult ads</span>
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-gray-900">
+          <input
+            type="checkbox"
+            checked={allowGambling}
+            onChange={(e) => setAllowGambling(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span>Allow gambling ads</span>
+        </label>
       </div>
       {publisher && (
         <div>
