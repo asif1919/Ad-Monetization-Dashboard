@@ -23,14 +23,6 @@ export interface Publisher {
   updated_at: string;
 }
 
-export interface Domain {
-  id: string;
-  publisher_id: string;
-  domain_site_id: string;
-  display_name: string | null;
-  created_at: string;
-}
-
 export interface MonthlyConfig {
   id: string;
   month: number;
@@ -45,7 +37,6 @@ export interface DailyStat {
   id: string;
   stat_date: string;
   publisher_id: string;
-  domain_id: string | null;
   impressions: number;
   clicks: number;
   revenue: number;

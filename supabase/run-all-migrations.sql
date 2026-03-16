@@ -27,15 +27,6 @@ CREATE TABLE public.profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE public.domains (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  publisher_id UUID NOT NULL REFERENCES public.publishers(id) ON DELETE CASCADE,
-  domain_site_id TEXT NOT NULL,
-  display_name TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(publisher_id, domain_site_id)
-);
-
 CREATE TABLE public.monthly_config (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   month INT NOT NULL CHECK (month >= 1 AND month <= 12),
@@ -51,7 +42,6 @@ CREATE TABLE public.daily_stats (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   stat_date DATE NOT NULL,
   publisher_id UUID NOT NULL REFERENCES public.publishers(id) ON DELETE CASCADE,
-  domain_id UUID REFERENCES public.domains(id) ON DELETE SET NULL,
   impressions BIGINT DEFAULT 0,
   clicks BIGINT DEFAULT 0,
   revenue DECIMAL(12,2) DEFAULT 0,
@@ -59,7 +49,7 @@ CREATE TABLE public.daily_stats (
   is_estimated BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(stat_date, publisher_id, domain_id)
+  UNIQUE(stat_date, publisher_id)
 );
 
 CREATE TABLE public.payouts (
@@ -103,11 +93,21 @@ CREATE TABLE public.import_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE public.publisher_monthly_targets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  publisher_id UUID NOT NULL REFERENCES public.publishers(id) ON DELETE CASCADE,
+  month INT NOT NULL CHECK (month >= 1 AND month <= 12),
+  year INT NOT NULL,
+  target_revenue DECIMAL(12,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(publisher_id, month, year)
+);
+
 CREATE INDEX idx_daily_stats_publisher_date ON public.daily_stats(publisher_id, stat_date);
 CREATE INDEX idx_daily_stats_date ON public.daily_stats(stat_date);
-CREATE INDEX idx_domains_publisher ON public.domains(publisher_id);
-CREATE INDEX idx_domains_site_id ON public.domains(domain_site_id);
 CREATE INDEX idx_payouts_publisher ON public.payouts(publisher_id);
+CREATE INDEX idx_publisher_monthly_targets_lookup ON public.publisher_monthly_targets(publisher_id, month, year);
 CREATE INDEX idx_invoices_publisher ON public.invoices(publisher_id);
 CREATE INDEX IF NOT EXISTS idx_publishers_name_trgm
   ON public.publishers
@@ -119,10 +119,10 @@ CREATE INDEX IF NOT EXISTS idx_publishers_email_trgm
 -- ========== 2. RLS ==========
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.publishers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.domains ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.monthly_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.daily_stats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payouts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.publisher_monthly_targets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.invoices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.import_logs ENABLE ROW LEVEL SECURITY;
 
@@ -143,8 +143,6 @@ CREATE POLICY "Super admin can all profiles" ON public.profiles FOR ALL USING (p
 CREATE POLICY "Super admin full publishers" ON public.publishers FOR ALL USING (public.is_super_admin());
 CREATE POLICY "Publishers read own" ON public.publishers FOR SELECT USING (id = public.current_publisher_id());
 
-CREATE POLICY "Super admin full domains" ON public.domains FOR ALL USING (public.is_super_admin());
-CREATE POLICY "Publishers read own domains" ON public.domains FOR SELECT USING (publisher_id = public.current_publisher_id());
 
 CREATE POLICY "Super admin full monthly_config" ON public.monthly_config FOR ALL USING (public.is_super_admin());
 CREATE POLICY "Publishers read monthly_config" ON public.monthly_config FOR SELECT USING (true);
@@ -154,6 +152,9 @@ CREATE POLICY "Publishers read own daily_stats" ON public.daily_stats FOR SELECT
 
 CREATE POLICY "Super admin full payouts" ON public.payouts FOR ALL USING (public.is_super_admin());
 CREATE POLICY "Publishers read own payouts" ON public.payouts FOR SELECT USING (publisher_id = public.current_publisher_id());
+
+CREATE POLICY "Super admin full publisher_monthly_targets" ON public.publisher_monthly_targets FOR ALL USING (public.is_super_admin());
+CREATE POLICY "Publishers read own publisher_monthly_targets" ON public.publisher_monthly_targets FOR SELECT USING (publisher_id = public.current_publisher_id());
 
 CREATE POLICY "Super admin full invoices" ON public.invoices FOR ALL USING (public.is_super_admin());
 CREATE POLICY "Publishers read own invoices" ON public.invoices FOR SELECT USING (publisher_id = public.current_publisher_id());

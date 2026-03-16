@@ -2,7 +2,6 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 export interface InvoiceData {
   publisherName: string;
-  domains: string[];
   month: number;
   year: number;
   totalImpressions: number;
@@ -34,9 +33,6 @@ export async function buildInvoicePdf(data: InvoiceData): Promise<Uint8Array> {
   draw(`Status: ${data.status}`, 12);
   y -= 16;
   draw(`Publisher: ${data.publisherName}`, 12, true);
-  if (data.domains.length > 0) {
-    draw(`Domains: ${data.domains.join(", ")}`, 10);
-  }
   y -= 16;
   draw(`Total Impressions: ${data.totalImpressions.toLocaleString()}`, 11);
   draw(`Total Revenue: $${data.totalRevenue.toFixed(2)}`, 11);

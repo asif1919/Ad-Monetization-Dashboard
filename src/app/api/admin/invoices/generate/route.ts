@@ -52,16 +52,6 @@ export async function POST(request: Request) {
     .select("id, name, revenue_share_pct")
     .in("id", [...byPublisher.keys()]);
 
-  const { data: domainsByPublisher } = await supabase
-    .from("domains")
-    .select("publisher_id, domain_site_id");
-  const domainsMap = new Map<string, string[]>();
-  for (const d of domainsByPublisher ?? []) {
-    const list = domainsMap.get(d.publisher_id) ?? [];
-    list.push(d.domain_site_id);
-    domainsMap.set(d.publisher_id, list);
-  }
-
   let invoiceNumber = 1000;
   const { data: lastInv } = await supabase
     .from("invoices")
@@ -82,7 +72,6 @@ export async function POST(request: Request) {
     const invNum = `INV-${invoiceNumber++}`;
     const pdfBuffer = await buildInvoicePdf({
       publisherName: p.name,
-      domains: domainsMap.get(p.id) ?? [],
       month,
       year,
       totalImpressions: tot.impressions,

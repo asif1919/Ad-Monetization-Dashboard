@@ -50,12 +50,8 @@ export default async function AdminLayout({
   const nav = [
     { href: "/admin", label: "Overview" },
     { href: "/admin/publishers", label: "Publishers" },
-    { href: "/admin/domains", label: "Domains" },
-    { href: "/admin/config", label: "Revenue config" },
+    { href: "/admin/revenue", label: "Revenue & Payouts" },
     { href: "/admin/support", label: "Support", support: true },
-    { href: "/admin/import", label: "Import Excel" },
-    { href: "/admin/payouts", label: "Payouts" },
-    { href: "/admin/invoices", label: "Invoices" },
   ] as const;
 
   return (
@@ -65,15 +61,15 @@ export default async function AdminLayout({
           Admin
         </div>
         <nav className="p-2 flex-1">
-          {nav.map(({ href, label, support }) => (
+          {nav.map((item) => (
             <Link
-              key={href}
-              href={href}
+              key={item.href}
+              href={item.href}
               className="block px-3 py-2 rounded hover:bg-gray-800 text-sm"
             >
               <span className="inline-flex items-center">
-                {label}
-                {support && <AdminSupportIndicator initialHasNew={hasUnreadSupport} />}
+                {item.label}
+                {"support" in item && item.support && <AdminSupportIndicator initialHasNew={hasUnreadSupport} />}
               </span>
             </Link>
           ))}

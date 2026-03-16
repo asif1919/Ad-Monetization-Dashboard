@@ -76,15 +76,15 @@ export default async function DashboardLayout({
           Publisher Dashboard
         </div>
         <nav className="p-2 flex-1">
-          {nav.map(({ href, label, support }) => (
+          {nav.map((item) => (
             <Link
-              key={href}
-              href={href}
+              key={item.href}
+              href={item.href}
               className="block px-3 py-2 rounded hover:bg-gray-700 text-sm"
             >
               <span className="inline-flex items-center">
-                {label}
-                {support && <PublisherSupportIndicator initialHasNew={hasUnreadSupport} />}
+                {item.label}
+                {"support" in item && item.support && <PublisherSupportIndicator initialHasNew={hasUnreadSupport} />}
               </span>
             </Link>
           ))}

@@ -4,7 +4,6 @@ export type ColumnMapping = {
   publisher_id?: number;
   publisher_email?: number;
   date?: number;
-  domain_site_id?: number;
   impressions?: number;
   clicks?: number;
   revenue?: number;
@@ -14,7 +13,6 @@ export interface ParsedRow {
   publisher_id?: string;
   publisher_email?: string;
   date?: string;
-  domain_site_id?: string;
   impressions?: number;
   clicks?: number;
   revenue?: number;
@@ -64,7 +62,6 @@ export function applyMapping(
       publisher_id: get(mapping.publisher_id),
       publisher_email: get(mapping.publisher_email),
       date: get(mapping.date),
-      domain_site_id: get(mapping.domain_site_id),
       impressions: getNum(mapping.impressions),
       clicks: getNum(mapping.clicks),
       revenue: getNum(mapping.revenue),

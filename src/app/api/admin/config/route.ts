@@ -87,7 +87,6 @@ export async function POST(request: Request) {
   const toInsert = rows.map((r) => ({
     stat_date: r.stat_date,
     publisher_id: r.publisher_id,
-    domain_id: null,
     impressions: r.impressions,
     clicks: 0,
     revenue: r.revenue,

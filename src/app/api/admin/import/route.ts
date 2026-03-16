@@ -5,7 +5,6 @@ type Row = {
   publisher_id?: string;
   publisher_email?: string;
   date: string | null;
-  domain_site_id?: string;
   impressions: number;
   clicks: number;
   revenue: number;
@@ -45,27 +44,19 @@ export async function POST(request: Request) {
     );
   }
 
-  // Resolve publisher_id for each row (by email, id, or domain_site_id)
+  // Resolve publisher_id for each row (by email or id)
   const { data: publishers } = await supabase
     .from("publishers")
     .select("id, email");
-  const { data: domains } = await supabase
-    .from("domains")
-    .select("id, publisher_id, domain_site_id");
 
   const byEmail = new Map<string, string>();
-  const byDomain = new Map<string, string>();
   publishers?.forEach((p) => byEmail.set(p.email.toLowerCase(), p.id));
-  domains?.forEach((d) =>
-    byDomain.set(String(d.domain_site_id).toLowerCase().trim(), d.publisher_id)
-  );
 
   const unmatched: string[] = [];
   const errors: string[] = [];
   const toInsert: {
     stat_date: string;
     publisher_id: string;
-    domain_id: string | null;
     impressions: number;
     clicks: number;
     revenue: number;
@@ -87,21 +78,14 @@ export async function POST(request: Request) {
     if (!publisherId && r.publisher_email) {
       publisherId = byEmail.get(r.publisher_email.toLowerCase().trim()) ?? null;
     }
-    if (!publisherId && r.domain_site_id) {
-      publisherId =
-        byDomain.get(String(r.domain_site_id).toLowerCase().trim()) ?? null;
-    }
     if (!publisherId) {
-      unmatched.push(
-        r.publisher_email ?? r.publisher_id ?? r.domain_site_id ?? `row ${i + 1}`
-      );
+      unmatched.push(r.publisher_email ?? r.publisher_id ?? `row ${i + 1}`);
       continue;
     }
     const statDate = r.date.slice(0, 10);
     toInsert.push({
       stat_date: statDate,
       publisher_id: publisherId,
-      domain_id: null,
       impressions: Number(r.impressions) || 0,
       clicks: Number(r.clicks) || 0,
       revenue: Number(r.revenue) || 0,
