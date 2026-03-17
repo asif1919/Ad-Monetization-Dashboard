@@ -28,10 +28,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid month or year" }, { status: 400 });
   }
 
+  const startDate = `${yearNum}-${String(monthNum).padStart(2, "0")}-01`;
+  const endDate = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(
+    new Date(yearNum, monthNum, 0).getDate()
+  ).padStart(2, "0")}`;
+
   const { data: publishers } = await supabase
     .from("publishers")
-    .select("id, name, email")
-    .eq("status", "active")
+    .select("id, name, email, public_id, status")
     .order("name");
 
   const { data: targets } = await supabase
@@ -47,17 +51,80 @@ export async function GET(request: Request) {
     .eq("year", yearNum)
     .maybeSingle();
 
+  const { data: stats } = await supabase
+    .from("daily_stats")
+    .select("publisher_id, is_estimated")
+    .gte("stat_date", startDate)
+    .lte("stat_date", endDate);
+
+  const { data: logs } = await supabase
+    .from("import_logs")
+    .select("unmatched_data, errors, created_at")
+    .gte("created_at", startDate)
+    .lte("created_at", endDate);
+
   const targetByPublisher = new Map(
-    (targets ?? []).map((t) => [t.publisher_id, { id: t.id, target_revenue: Number(t.target_revenue) }])
+    (targets ?? []).map((t) => [
+      t.publisher_id,
+      { id: t.id, target_revenue: Number(t.target_revenue) },
+    ])
   );
 
-  const list = (publishers ?? []).map((p) => ({
-    publisher_id: p.id,
-    name: p.name,
-    email: p.email,
-    target_revenue: targetByPublisher.get(p.id)?.target_revenue ?? 0,
-    target_id: targetByPublisher.get(p.id)?.id ?? null,
-  }));
+  const estimateStatusByPublisher = new Map<string, "none" | "generated" | "skipped_real_data">();
+  for (const row of stats ?? []) {
+    const pid = row.publisher_id as string;
+    const isEstimated = row.is_estimated as boolean;
+    const current = estimateStatusByPublisher.get(pid);
+    if (isEstimated) {
+      if (!current) estimateStatusByPublisher.set(pid, "generated");
+    } else {
+      estimateStatusByPublisher.set(pid, "skipped_real_data");
+    }
+  }
+
+  type UploadStatus = "pending" | "uploaded" | "failed";
+  const uploadStatusByPublisher = new Map<string, UploadStatus>();
+  for (const log of logs ?? []) {
+    const createdAt = new Date(log.created_at as string | number | Date);
+    const entries = ([] as any[]).concat(log.unmatched_data ?? [], log.errors ?? []);
+    for (const entry of entries) {
+      if (
+        entry &&
+        typeof entry === "object" &&
+        "publisher_id" in entry &&
+        "month" in entry &&
+        "year" in entry &&
+        entry.month === monthNum &&
+        entry.year === yearNum
+      ) {
+        const pid = String(entry.publisher_id);
+        const status = entry.status as UploadStatus | undefined;
+        if (!status) continue;
+        const prev = uploadStatusByPublisher.get(pid);
+        if (!prev || createdAt > new Date()) {
+          uploadStatusByPublisher.set(pid, status);
+        }
+      }
+    }
+  }
+
+  const list = (publishers ?? []).map((p) => {
+    const baseStatus: UploadStatus = "pending";
+    const upload_status = uploadStatusByPublisher.get(p.id) ?? baseStatus;
+    const estimate_status = estimateStatusByPublisher.get(p.id) ?? "none";
+    const target = targetByPublisher.get(p.id);
+    return {
+      publisher_id: p.id,
+      name: p.name,
+      email: p.email,
+      public_id: p.public_id ?? null,
+      is_active: p.status === "active",
+      target_revenue: target?.target_revenue ?? 0,
+      target_id: target?.id ?? null,
+      upload_status,
+      estimate_status,
+    };
+  });
 
   return NextResponse.json({
     targets: list,

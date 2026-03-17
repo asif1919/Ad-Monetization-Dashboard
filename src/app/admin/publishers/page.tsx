@@ -15,7 +15,7 @@ export default async function PublishersPage({
   let query = supabase
     .from("publishers")
     .select(
-      "id, name, email, phone, website_url, revenue_share_pct, status, allow_adult, allow_gambling, created_at"
+      "id, name, email, phone, website_url, revenue_share_pct, status, allow_adult, allow_gambling, created_at, public_id"
     );
 
   const search = q?.trim();
@@ -49,6 +49,7 @@ export default async function PublishersPage({
               <th className="text-left p-3">Email</th>
               <th className="text-left p-3">Phone</th>
               <th className="text-left p-3">Website</th>
+              <th className="text-left p-3">Report ID</th>
               <th className="text-left p-3">Policies</th>
               <th className="text-left p-3">Revenue share %</th>
               <th className="text-left p-3">Status</th>
@@ -74,6 +75,9 @@ export default async function PublishersPage({
                   ) : (
                     "—"
                   )}
+                </td>
+                <td className="p-3 text-gray-600 text-xs">
+                  {p.public_id ?? "—"}
                 </td>
                 <td className="p-3 text-xs text-gray-700">
                   <span className={p.allow_adult ? "text-green-700" : "text-gray-500"}>

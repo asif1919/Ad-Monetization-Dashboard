@@ -8,8 +8,11 @@ type TargetRow = {
   publisher_id: string;
   name: string;
   email: string;
+  public_id?: string | null;
   target_revenue: number;
   target_id: string | null;
+  upload_status?: "pending" | "uploaded" | "failed";
+  estimate_status?: "none" | "generated" | "skipped_real_data";
 };
 
 type PayoutRow = {
@@ -131,6 +134,18 @@ export function RevenuePageClient({
     }
   }
 
+  async function generateEstimateForPublisher(publisherId: string) {
+    const res = await fetch("/api/admin/revenue/estimate/publisher", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publisher_id: publisherId, month, year }),
+    });
+    if (res.ok) {
+      await loadTargets();
+      router.refresh();
+    }
+  }
+
   async function markPayoutPaid(payoutId: string) {
     const res = await fetch("/api/admin/revenue/payouts", {
       method: "PATCH",
@@ -153,7 +168,11 @@ export function RevenuePageClient({
           <label className="text-sm text-gray-700">Month</label>
           <select
             value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
+            onChange={(e) => {
+              const nextMonth = Number(e.target.value);
+              setMonth(nextMonth);
+              router.push(`/admin/revenue?month=${nextMonth}&year=${year}`);
+            }}
             className="rounded border border-gray-300 px-3 py-2 bg-white text-gray-900"
           >
             {MONTHS.map((m) => (
@@ -165,7 +184,11 @@ export function RevenuePageClient({
           <label className="text-sm text-gray-700">Year</label>
           <select
             value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
+            onChange={(e) => {
+              const nextYear = Number(e.target.value);
+              setYear(nextYear);
+              router.push(`/admin/revenue?month=${month}&year=${nextYear}`);
+            }}
             className="rounded border border-gray-300 px-3 py-2 bg-white text-gray-900"
           >
             {YEARS.map((y) => (
@@ -180,8 +203,10 @@ export function RevenuePageClient({
       <p className="text-sm text-gray-600 max-w-2xl">
         Set per-publisher monthly targets to drive estimated daily stats until
         you upload real data. Uploading real data for a month replaces
-        estimated data for that month. Use &quot;Generate estimates&quot; after
-        editing targets to refresh estimated daily stats.
+        estimated data for that month. Each publisher has a report ID like{" "}
+        <code className="px-1 rounded bg-gray-100 text-xs">Pub_0000123</code>{" "}
+        which should be used in your monthly Excel reports so rows map
+        correctly to publishers.
       </p>
 
       {/* A. Per-publisher monthly targets */}
@@ -196,7 +221,7 @@ export function RevenuePageClient({
             disabled={estimateLoading}
             className="rounded bg-blue-600 px-4 py-2 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {estimateLoading ? "Generating…" : "Generate estimates"}
+            {estimateLoading ? "Generating all…" : "Generate all estimates"}
           </button>
         </div>
         {loadingTargets ? (
@@ -208,8 +233,12 @@ export function RevenuePageClient({
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="text-left p-3">Publisher</th>
                   <th className="text-left p-3">Email</th>
+                  <th className="text-left p-3">Report ID</th>
                   <th className="text-left p-3">Monthly target (USD)</th>
-                  <th className="text-left p-3">Real data imported</th>
+                  <th className="text-left p-3">Upload report</th>
+                  <th className="text-left p-3">Upload status</th>
+                  <th className="text-left p-3">Estimate</th>
+                  <th className="text-left p-3">Estimate status</th>
                 </tr>
               </thead>
               <tbody>
@@ -217,6 +246,9 @@ export function RevenuePageClient({
                   <tr key={t.publisher_id} className="border-b border-gray-100">
                     <td className="p-3 font-medium">{t.name}</td>
                     <td className="p-3 text-gray-600">{t.email}</td>
+                    <td className="p-3 text-xs text-gray-700">
+                      {t.public_id ?? "—"}
+                    </td>
                     <td className="p-3">
                       <input
                         type="number"
@@ -259,10 +291,55 @@ export function RevenuePageClient({
                         </span>
                       )}
                     </td>
-                    <td className="p-3 text-gray-600">
-                      {realDataImportedAt
-                        ? new Date(realDataImportedAt).toLocaleString()
-                        : "—"}
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        className="text-blue-600 hover:underline text-xs"
+                        onClick={() =>
+                          router.push(
+                            `/admin/revenue/upload?publisher_id=${t.publisher_id}&month=${month}&year=${year}`
+                          )
+                        }
+                      >
+                        Upload report
+                      </button>
+                    </td>
+                    <td className="p-3 text-xs">
+                      {t.upload_status === "uploaded" && (
+                        <span className="inline-flex rounded-full bg-green-50 px-2 py-0.5 text-green-700">
+                          Uploaded
+                        </span>
+                      )}
+                      {t.upload_status === "failed" && (
+                        <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-red-700">
+                          Failed
+                        </span>
+                      )}
+                      {(!t.upload_status || t.upload_status === "pending") && (
+                        <span className="inline-flex rounded-full bg-gray-50 px-2 py-0.5 text-gray-700">
+                          Pending
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        className="text-blue-600 hover:underline text-xs disabled:opacity-50"
+                        disabled={
+                          t.estimate_status === "skipped_real_data" ||
+                          (t.target_revenue ?? 0) <= 0
+                        }
+                        onClick={() => generateEstimateForPublisher(t.publisher_id)}
+                      >
+                        Generate
+                      </button>
+                    </td>
+                    <td className="p-3 text-xs text-gray-700">
+                      {t.estimate_status === "generated" && "Generated"}
+                      {t.estimate_status === "skipped_real_data" &&
+                        "Skipped (real data imported)"}
+                      {(!t.estimate_status || t.estimate_status === "none") &&
+                        "Not generated"}
                     </td>
                   </tr>
                 ))}

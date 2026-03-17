@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 export type ColumnMapping = {
   publisher_id?: number;
   publisher_email?: number;
+  publisher_public_id?: number;
   date?: number;
   impressions?: number;
   clicks?: number;
@@ -12,6 +13,7 @@ export type ColumnMapping = {
 export interface ParsedRow {
   publisher_id?: string;
   publisher_email?: string;
+  publisher_public_id?: string;
   date?: string;
   impressions?: number;
   clicks?: number;
@@ -61,6 +63,7 @@ export function applyMapping(
     rows.push({
       publisher_id: get(mapping.publisher_id),
       publisher_email: get(mapping.publisher_email),
+      publisher_public_id: get(mapping.publisher_public_id),
       date: get(mapping.date),
       impressions: getNum(mapping.impressions),
       clicks: getNum(mapping.clicks),

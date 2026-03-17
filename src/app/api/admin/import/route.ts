@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 type Row = {
   publisher_id?: string;
   publisher_email?: string;
+  publisher_public_id?: string;
   date: string | null;
   impressions: number;
   clicks: number;
@@ -47,10 +48,14 @@ export async function POST(request: Request) {
   // Resolve publisher_id for each row (by email or id)
   const { data: publishers } = await supabase
     .from("publishers")
-    .select("id, email");
+    .select("id, email, public_id");
 
   const byEmail = new Map<string, string>();
-  publishers?.forEach((p) => byEmail.set(p.email.toLowerCase(), p.id));
+  const byPublicId = new Map<string, string>();
+  publishers?.forEach((p) => {
+    if (p.email) byEmail.set(p.email.toLowerCase(), p.id);
+    if (p.public_id) byPublicId.set(String(p.public_id), p.id);
+  });
 
   const unmatched: string[] = [];
   const errors: string[] = [];
@@ -75,11 +80,19 @@ export async function POST(request: Request) {
       const p = publishers?.find((x) => x.id === r.publisher_id);
       if (p) publisherId = p.id;
     }
+    if (!publisherId && r.publisher_public_id) {
+      publisherId = byPublicId.get(r.publisher_public_id.trim()) ?? null;
+    }
     if (!publisherId && r.publisher_email) {
       publisherId = byEmail.get(r.publisher_email.toLowerCase().trim()) ?? null;
     }
     if (!publisherId) {
-      unmatched.push(r.publisher_email ?? r.publisher_id ?? `row ${i + 1}`);
+      unmatched.push(
+        r.publisher_public_id ??
+          r.publisher_email ??
+          r.publisher_id ??
+          `row ${i + 1}`
+      );
       continue;
     }
     const statDate = r.date.slice(0, 10);

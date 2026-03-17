@@ -40,6 +40,19 @@ export async function POST(request: Request) {
     .eq("month", month)
     .eq("year", year);
 
+  // Find publishers that already have real data for this month so we don't
+  // overwrite them with new estimates.
+  const { data: realStats } = await supabase
+    .from("daily_stats")
+    .select("publisher_id")
+    .gte("stat_date", startDate)
+    .lte("stat_date", endDate)
+    .eq("is_estimated", false);
+
+  const publishersWithRealData = new Set(
+    (realStats ?? []).map((r: any) => r.publisher_id as string)
+  );
+
   await supabase
     .from("daily_stats")
     .delete()
@@ -59,6 +72,7 @@ export async function POST(request: Request) {
   for (const t of targets ?? []) {
     const amount = Number(t.target_revenue);
     if (amount <= 0) continue;
+    if (publishersWithRealData.has(t.publisher_id)) continue;
     const rows = distributePublisherTargetRevenue(
       t.publisher_id,
       amount,

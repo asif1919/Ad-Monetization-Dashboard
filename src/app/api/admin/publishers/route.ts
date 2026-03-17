@@ -94,6 +94,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
+  // Assign a human-friendly public_id like Pub_0000123 if not already set
+  let publicId: string | null = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate =
+      "Pub_" + String(Math.floor(Math.random() * 10_000_000)).padStart(7, "0");
+    const { error: updateError } = await admin
+      .from("publishers")
+      .update({ public_id: candidate })
+      .eq("id", publisherRow.id)
+      .is("public_id", null);
+    if (!updateError) {
+      publicId = candidate;
+      break;
+    }
+    // If unique violation, try again; otherwise fail fast
+    if (!updateError.message?.includes("duplicate")) {
+      await admin.from("publishers").delete().eq("id", publisherRow.id);
+      await admin.auth.admin.deleteUser(authUserId);
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+  }
+
   const { error: profileError } = await admin
     .from("profiles")
     .update({ publisher_id: publisherRow.id })
@@ -105,5 +127,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to link profile" }, { status: 500 });
   }
 
-  return NextResponse.json({ id: publisherRow.id });
+  return NextResponse.json({ id: publisherRow.id, public_id: publicId });
 }

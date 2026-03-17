@@ -15,6 +15,7 @@ type Publisher = {
   website_url?: string | null;
   allow_adult?: boolean;
   allow_gambling?: boolean;
+  public_id?: string | null;
 };
 
 export function PublisherForm({ publisher }: { publisher?: Publisher }) {
@@ -37,6 +38,7 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { show } = useToast();
+  const publicId = publisher?.public_id ?? null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -98,6 +100,22 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
           className="w-full rounded border border-gray-300 px-3 py-2 bg-white text-gray-900 placeholder:text-gray-600"
         />
       </div>
+      {publicId && (
+        <div>
+          <label className="block text-sm font-medium text-gray-900 mb-1">
+            Publisher report ID
+          </label>
+          <div className="flex items-center gap-2">
+            <code className="px-2 py-1 rounded bg-gray-100 text-xs text-gray-900">
+              {publicId}
+            </code>
+          </div>
+          <p className="text-xs text-gray-600 mt-1">
+            Use this ID in monthly Excel reports (e.g. TM_report_stats.xlsx) to
+            link rows to this publisher.
+          </p>
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-gray-900 mb-1">
           Email

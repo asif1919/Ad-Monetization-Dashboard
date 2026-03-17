@@ -70,6 +70,7 @@ export function ImportWizard({ configs }: { configs: Config[] }) {
           rows: previewRows.map((r) => ({
             publisher_id: r.publisher_id,
             publisher_email: r.publisher_email,
+            publisher_public_id: r.publisher_public_id,
             date: parseDate(r.date ?? ""),
             impressions: r.impressions ?? 0,
             clicks: r.clicks ?? 0,
@@ -111,11 +112,15 @@ export function ImportWizard({ configs }: { configs: Config[] }) {
         <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-4">
           <h2 className="font-medium">Map columns</h2>
           <p className="text-sm text-gray-700">
-            Choose which column index (0-based) maps to each field. At least one of Publisher ID or Publisher Email is required; Date and Revenue are required for import.
+            Choose which column index (0-based) maps to each field. At least one
+            of Publisher ID, Publisher Public ID (e.g. Pub_0000123), or
+            Publisher Email is required; Date and Revenue are required for
+            import.
           </p>
           <div className="grid grid-cols-2 gap-4">
             {[
-              ["publisher_id", "Publisher ID (optional)"],
+              ["publisher_id", "Publisher ID (optional, UUID)"],
+              ["publisher_public_id", "Publisher Public ID (optional, e.g. Pub_0000123)"],
               ["publisher_email", "Publisher email (optional)"],
               ["date", "Date"],
               ["impressions", "Impressions"],
