@@ -2,8 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AdminSupportIndicator } from "@/components/admin-support-indicator";
-import { CurrencyProvider } from "@/components/currency/currency-provider";
-import { CurrencyToggle } from "@/components/currency/currency-toggle";
 
 export default async function AdminLayout({
   children,
@@ -16,32 +14,17 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  let { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from("profiles")
-    .select("role, preferred_currency")
+    .select("role")
     .eq("id", user.id)
     .single();
-
-  if (profileError) {
-    const { data: fallback } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    profile = fallback ?? undefined;
-  }
   if (profile?.role !== "super_admin") redirect("/dashboard");
-  const initialCurrency =
-    profile && "preferred_currency" in profile && profile.preferred_currency === "BDT"
-      ? "BDT"
-      : "USD";
 
   // Determine if there are any unread publisher messages for admin
   const { data: ticketsWithMessages } = await supabase
     .from("support_tickets")
-    .select(
-      "admin_last_seen_at, support_messages(sender_type, created_at)"
-    )
+    .select("admin_last_seen_at, support_messages(sender_type, created_at)")
     .eq("status", "open")
     .limit(200);
 
@@ -84,7 +67,9 @@ export default async function AdminLayout({
             >
               <span className="inline-flex items-center">
                 {item.label}
-                {"support" in item && item.support && <AdminSupportIndicator initialHasNew={hasUnreadSupport} />}
+                {"support" in item && item.support && (
+                  <AdminSupportIndicator initialHasNew={hasUnreadSupport} />
+                )}
               </span>
             </Link>
           ))}
@@ -100,14 +85,7 @@ export default async function AdminLayout({
           </form>
         </div>
       </aside>
-      <main className="flex-1 p-6 bg-gray-50 overflow-auto">
-        <CurrencyProvider initialCurrency={initialCurrency}>
-          <div className="flex items-center justify-end gap-4 mb-4">
-            <CurrencyToggle />
-          </div>
-          {children}
-        </CurrencyProvider>
-      </main>
+      <main className="flex-1 p-6 bg-gray-50 overflow-auto">{children}</main>
     </div>
   );
 }

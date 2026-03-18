@@ -25,7 +25,7 @@ type CurrencyContextValue = {
   refreshRate: () => Promise<void>;
 };
 
-const CurrencyContext = createContext<CurrencyContextValue | null>(null);
+export const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
 export function CurrencyProvider({
   initialCurrency,

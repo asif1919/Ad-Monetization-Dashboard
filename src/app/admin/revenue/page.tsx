@@ -1,4 +1,8 @@
 import { RevenuePageClient } from "./revenue-page-client";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { CurrencyProvider } from "@/components/currency/currency-provider";
+import { CurrencyToggle } from "@/components/currency/currency-toggle";
 
 export default async function RevenuePage({
   searchParams,
@@ -14,10 +18,30 @@ export default async function RevenuePage({
     ? parseInt(params.year, 10) || now.getFullYear()
     : now.getFullYear();
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("preferred_currency")
+    .eq("id", user.id)
+    .single();
+
+  const initialCurrency =
+    profile?.preferred_currency === "BDT" ? "BDT" : "USD";
+
   return (
-    <RevenuePageClient
-      initialMonth={initialMonth}
-      initialYear={initialYear}
-    />
+    <CurrencyProvider initialCurrency={initialCurrency}>
+      <div className="flex items-center justify-end gap-4 mb-4">
+        <CurrencyToggle />
+      </div>
+      <RevenuePageClient
+        initialMonth={initialMonth}
+        initialYear={initialYear}
+      />
+    </CurrencyProvider>
   );
 }

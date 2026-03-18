@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ReportsTable } from "./reports-table";
 import { ReportDownload } from "./report-download";
+import { getEffectiveStatsAtTime } from "@/lib/time-segments";
 
 export default async function ReportsPage({
   searchParams,
@@ -28,25 +29,60 @@ export default async function ReportsPage({
 
   // Note: this query returns only dates that have stored rows in daily_stats.
   // We do not generate placeholder rows for missing dates in the range.
-  const { data: rows } = await supabase
+  const { data: rawRows } = await supabase
     .from("daily_stats")
-    .select("stat_date, impressions, clicks, revenue, ecpm")
+    .select("stat_date, impressions, clicks, revenue, ecpm, time_segments")
     .eq("publisher_id", publisherId)
     .gte("stat_date", fromDate)
     .lte("stat_date", toDate)
     .order("stat_date", { ascending: false })
     .limit(500);
 
-  const totalImpressions = rows?.reduce((s, r) => s + Number(r.impressions), 0) ?? 0;
-  const totalClicks = rows?.reduce((s, r) => s + Number(r.clicks), 0) ?? 0;
-  const totalRevenue = rows?.reduce((s, r) => s + Number(r.revenue), 0) ?? 0;
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const rows = (rawRows ?? []).map((r) => {
+    if (r.stat_date === todayUtc && r.time_segments && Array.isArray(r.time_segments)) {
+      const effective = getEffectiveStatsAtTime(
+        {
+          stat_date: r.stat_date,
+          revenue: Number(r.revenue) ?? 0,
+          impressions: Number(r.impressions) ?? 0,
+          clicks: Number(r.clicks) ?? 0,
+          time_segments: r.time_segments,
+        },
+        now
+      );
+      const ecpm =
+        effective.impressions > 0
+          ? (effective.revenue / effective.impressions) * 1000
+          : 0;
+      return {
+        stat_date: r.stat_date,
+        impressions: effective.impressions,
+        clicks: effective.clicks,
+        revenue: effective.revenue,
+        ecpm,
+      };
+    }
+    return {
+      stat_date: r.stat_date,
+      impressions: Number(r.impressions) ?? 0,
+      clicks: Number(r.clicks) ?? 0,
+      revenue: Number(r.revenue) ?? 0,
+      ecpm: Number(r.ecpm) ?? 0,
+    };
+  });
+
+  const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
+  const totalClicks = rows.reduce((s, r) => s + r.clicks, 0);
+  const totalRevenue = rows.reduce((s, r) => s + r.revenue, 0);
   const avgEcpm = totalImpressions > 0 ? (totalRevenue / totalImpressions) * 1000 : 0;
 
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Reports</h1>
       <ReportsTable
-        rows={rows ?? []}
+        rows={rows}
         from={fromDate}
         to={toDate}
         summary={{

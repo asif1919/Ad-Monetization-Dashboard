@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { OverviewCards } from "./overview-cards";
 import { RevenueChart } from "./revenue-chart";
+import { getEffectiveStatsAtTime } from "@/lib/time-segments";
 
 export default async function DashboardOverviewPage() {
   const supabase = await createClient();
@@ -33,10 +34,11 @@ export default async function DashboardOverviewPage() {
   const prevMonthStartStr = prevMonthStart.toISOString().slice(0, 10);
   const prevMonthEndStr = prevMonthEnd.toISOString().slice(0, 10);
 
+  const now = new Date();
   const [todayRes, yesterdayRes, monthRes, prevMonthRes, chartRes] = await Promise.all([
     supabase
       .from("daily_stats")
-      .select("revenue, impressions, clicks, is_estimated")
+      .select("stat_date, revenue, impressions, clicks, is_estimated, time_segments")
       .eq("publisher_id", publisherId)
       .eq("stat_date", today)
       .maybeSingle(),
@@ -48,7 +50,7 @@ export default async function DashboardOverviewPage() {
       .maybeSingle(),
     supabase
       .from("daily_stats")
-      .select("revenue, impressions, clicks, is_estimated")
+      .select("stat_date, revenue, impressions, clicks, is_estimated, time_segments")
       .eq("publisher_id", publisherId)
       .gte("stat_date", monthStart)
       .lte("stat_date", today),
@@ -60,7 +62,7 @@ export default async function DashboardOverviewPage() {
       .lte("stat_date", prevMonthEndStr),
     supabase
       .from("daily_stats")
-      .select("stat_date, revenue, impressions, ecpm, is_estimated")
+      .select("stat_date, revenue, impressions, ecpm, is_estimated, time_segments")
       .eq("publisher_id", publisherId)
       .gte("stat_date", last30Start)
       .lte("stat_date", today)
@@ -71,23 +73,82 @@ export default async function DashboardOverviewPage() {
   const yesterdayStats = yesterdayRes.data;
   const monthStats = monthRes.data;
   const prevMonthStats = prevMonthRes.data;
-  const chartData = chartRes.data;
+  let chartData = chartRes.data ?? [];
 
-  const todayRevenue = Number(todayStats?.revenue) ?? 0;
+  const todayEffective = todayStats
+    ? getEffectiveStatsAtTime(
+        {
+          stat_date: today,
+          revenue: Number(todayStats.revenue) ?? 0,
+          impressions: Number(todayStats.impressions) ?? 0,
+          clicks: Number(todayStats.clicks) ?? 0,
+          time_segments: todayStats.time_segments ?? null,
+        },
+        now
+      )
+    : { revenue: 0, impressions: 0, clicks: 0 };
+
+  const todayRevenue = todayEffective.revenue;
   const yesterdayRevenue = Number(yesterdayStats?.revenue) ?? 0;
   const monthlyRevenue =
-    monthStats?.reduce((s, r) => s + Number(r.revenue), 0) ?? 0;
+    monthStats?.reduce((s, r) => {
+      const effective =
+        r.stat_date === today && r.time_segments
+          ? getEffectiveStatsAtTime(
+              {
+                stat_date: r.stat_date,
+                revenue: Number(r.revenue) ?? 0,
+                impressions: Number(r.impressions) ?? 0,
+                clicks: Number(r.clicks) ?? 0,
+                time_segments: r.time_segments,
+              },
+              now
+            )
+          : null;
+      return s + (effective ? effective.revenue : Number(r.revenue) ?? 0);
+    }, 0) ?? 0;
   const prevMonthRevenue =
     prevMonthStats?.reduce((s, r) => s + Number(r.revenue), 0) ?? 0;
 
-  const todayImpressions = Number(todayStats?.impressions) ?? 0;
+  const todayImpressions = todayEffective.impressions;
   const yesterdayImpressions = Number(yesterdayStats?.impressions) ?? 0;
   const monthlyImpressions =
-    monthStats?.reduce((s, r) => s + Number(r.impressions), 0) ?? 0;
+    monthStats?.reduce((s, r) => {
+      const effective =
+        r.stat_date === today && r.time_segments
+          ? getEffectiveStatsAtTime(
+              {
+                stat_date: r.stat_date,
+                revenue: Number(r.revenue) ?? 0,
+                impressions: Number(r.impressions) ?? 0,
+                clicks: Number(r.clicks) ?? 0,
+                time_segments: r.time_segments,
+              },
+              now
+            )
+          : null;
+      return s + (effective ? effective.impressions : Number(r.impressions) ?? 0);
+    }, 0) ?? 0;
   const prevMonthImpressions =
     prevMonthStats?.reduce((s, r) => s + Number(r.impressions), 0) ?? 0;
 
-  const monthlyClicks = monthStats?.reduce((s, r) => s + Number(r.clicks), 0) ?? 0;
+  const monthlyClicks =
+    monthStats?.reduce((s, r) => {
+      const effective =
+        r.stat_date === today && r.time_segments
+          ? getEffectiveStatsAtTime(
+              {
+                stat_date: r.stat_date,
+                revenue: Number(r.revenue) ?? 0,
+                impressions: Number(r.impressions) ?? 0,
+                clicks: Number(r.clicks) ?? 0,
+                time_segments: r.time_segments,
+              },
+              now
+            )
+          : null;
+      return s + (effective ? effective.clicks : Number(r.clicks) ?? 0);
+    }, 0) ?? 0;
   const monthlyEcpm =
     monthlyImpressions > 0 ? (monthlyRevenue / monthlyImpressions) * 1000 : 0;
   const todayEcpm =
@@ -113,6 +174,32 @@ export default async function DashboardOverviewPage() {
     prevMonthEcpm > 0
       ? ((monthlyEcpm - prevMonthEcpm) / prevMonthEcpm) * 100
       : 0;
+
+  chartData = chartData.map((d: { stat_date: string; revenue?: number; impressions?: number; ecpm?: number; time_segments?: unknown }) => {
+    if (d.stat_date === today && d.time_segments) {
+      const effective = getEffectiveStatsAtTime(
+        {
+          stat_date: d.stat_date,
+          revenue: Number(d.revenue) ?? 0,
+          impressions: Number(d.impressions) ?? 0,
+          clicks: 0,
+          time_segments: d.time_segments as { start: string; end: string; revenue: number; impressions: number; clicks: number }[],
+        },
+        now
+      );
+      const ecpm =
+        effective.impressions > 0
+          ? (effective.revenue / effective.impressions) * 1000
+          : 0;
+      return {
+        ...d,
+        revenue: effective.revenue,
+        impressions: effective.impressions,
+        ecpm,
+      };
+    }
+    return d;
+  });
 
   const hasRealDataThisMonth = (monthStats ?? []).some((r) => r.is_estimated === false);
   const showEstimatedBadge = (monthStats ?? []).length > 0 && !hasRealDataThisMonth;

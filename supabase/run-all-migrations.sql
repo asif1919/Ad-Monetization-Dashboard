@@ -252,6 +252,9 @@ ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS allow_gambling BOOLEAN NO
 -- Preferred display currency (USD or BDT); all amounts stored in USD
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS preferred_currency TEXT DEFAULT 'USD' CHECK (preferred_currency IN ('USD', 'BDT'));
 
+-- Time-based segments for progressive display of estimated daily stats (estimated rows only)
+ALTER TABLE public.daily_stats ADD COLUMN IF NOT EXISTS time_segments JSONB DEFAULT NULL;
+
 -- ========== 5. Storage buckets and policies ==========
 -- If INSERT fails, create buckets in Dashboard: Storage -> New bucket -> excel-imports (private), invoices (private)
 INSERT INTO storage.buckets (id, name, public)

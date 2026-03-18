@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getEffectiveStatsAtTime } from "@/lib/time-segments";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -45,16 +46,51 @@ export async function GET(request: Request) {
   const startDate = `${yearNum}-${String(monthNum).padStart(2, "0")}-01`;
   const endDate = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(new Date(yearNum, monthNum, 0).getDate()).padStart(2, "0")}`;
 
-  const { data: rows } = await supabase
+  const { data: rawRows } = await supabase
     .from("daily_stats")
-    .select("stat_date, impressions, clicks, revenue, ecpm")
+    .select("stat_date, impressions, clicks, revenue, ecpm, time_segments")
     .eq("publisher_id", publisherId)
     .gte("stat_date", startDate)
     .lte("stat_date", endDate)
     .order("stat_date");
 
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const rows = (rawRows ?? []).map((r) => {
+    if (r.stat_date === todayUtc && r.time_segments && Array.isArray(r.time_segments)) {
+      const effective = getEffectiveStatsAtTime(
+        {
+          stat_date: r.stat_date,
+          revenue: Number(r.revenue) ?? 0,
+          impressions: Number(r.impressions) ?? 0,
+          clicks: Number(r.clicks) ?? 0,
+          time_segments: r.time_segments,
+        },
+        now
+      );
+      const ecpm =
+        effective.impressions > 0
+          ? (effective.revenue / effective.impressions) * 1000
+          : 0;
+      return {
+        stat_date: r.stat_date,
+        impressions: effective.impressions,
+        clicks: effective.clicks,
+        revenue: effective.revenue,
+        ecpm,
+      };
+    }
+    return {
+      stat_date: r.stat_date,
+      impressions: Number(r.impressions) ?? 0,
+      clicks: Number(r.clicks) ?? 0,
+      revenue: Number(r.revenue) ?? 0,
+      ecpm: Number(r.ecpm) ?? 0,
+    };
+  });
+
   const header = "Date,Impressions,Clicks,Revenue,eCPM\n";
-  const body = (rows ?? [])
+  const body = rows
     .map(
       (r) =>
         `${r.stat_date},${r.impressions},${r.clicks},${Number(r.revenue).toFixed(2)},${Number(r.ecpm).toFixed(2)}`

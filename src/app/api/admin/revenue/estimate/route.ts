@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { distributePublisherTargetRevenue } from "@/lib/estimates";
+import { buildTimeSegments } from "@/lib/time-segments";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
     clicks: number;
     revenue: number;
     is_estimated: boolean;
+    time_segments: ReturnType<typeof buildTimeSegments>;
   }[] = [];
 
   for (const t of targets ?? []) {
@@ -80,6 +82,12 @@ export async function POST(request: Request) {
       month
     );
     for (const r of rows) {
+      const time_segments = buildTimeSegments(
+        r.revenue,
+        r.impressions,
+        r.clicks,
+        r.stat_date
+      );
       toInsert.push({
         stat_date: r.stat_date,
         publisher_id: r.publisher_id,
@@ -87,6 +95,7 @@ export async function POST(request: Request) {
         clicks: r.clicks,
         revenue: r.revenue,
         is_estimated: true,
+        time_segments,
       });
     }
   }

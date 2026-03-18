@@ -36,6 +36,14 @@ export interface MonthlyConfig {
   updated_at: string;
 }
 
+export interface TimeSegment {
+  start: string;
+  end: string;
+  revenue: number;
+  impressions: number;
+  clicks: number;
+}
+
 export interface DailyStat {
   id: string;
   stat_date: string;
@@ -45,6 +53,7 @@ export interface DailyStat {
   revenue: number;
   ecpm: number;
   is_estimated: boolean;
+  time_segments?: TimeSegment[] | null;
   created_at: string;
   updated_at: string;
 }

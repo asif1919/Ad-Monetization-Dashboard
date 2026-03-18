@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { distributePublisherTargetRevenue } from "@/lib/estimates";
+import { buildTimeSegments } from "@/lib/time-segments";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -84,14 +85,23 @@ export async function POST(request: Request) {
     .eq("is_estimated", true);
 
   const rows = distributePublisherTargetRevenue(publisher_id, amount, year, month);
-  const toInsert = rows.map((r) => ({
-    stat_date: r.stat_date,
-    publisher_id: r.publisher_id,
-    impressions: r.impressions,
-    clicks: r.clicks,
-    revenue: r.revenue,
-    is_estimated: true,
-  }));
+  const toInsert = rows.map((r) => {
+    const time_segments = buildTimeSegments(
+      r.revenue,
+      r.impressions,
+      r.clicks,
+      r.stat_date
+    );
+    return {
+      stat_date: r.stat_date,
+      publisher_id: r.publisher_id,
+      impressions: r.impressions,
+      clicks: r.clicks,
+      revenue: r.revenue,
+      is_estimated: true,
+      time_segments,
+    };
+  });
 
   if (toInsert.length > 0) {
     const { error } = await supabase.from("daily_stats").insert(toInsert);
