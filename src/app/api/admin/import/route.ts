@@ -45,7 +45,9 @@ export async function POST(request: Request) {
     );
   }
 
-  // Resolve publisher_id for each row (by email or id)
+  // Resolve publisher_id for each row (by email or id). For each publisher+month
+  // we remove any existing daily_stats and then insert only the dates coming
+  // from this file. We do not generate rows for missing dates in the month.
   const { data: publishers } = await supabase
     .from("publishers")
     .select("id, email, public_id");

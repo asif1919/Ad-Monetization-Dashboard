@@ -124,6 +124,10 @@ export function UploadPageClient({
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className="block w-full text-sm text-gray-800 file:mr-4 file:rounded file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-blue-700"
           />
+          <p className="mt-1 text-xs text-gray-600">
+            Only the dates present in this file will be stored and shown in publisher
+            reports. No data is generated for missing dates in the month.
+          </p>
         </div>
         {error && (
           <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>

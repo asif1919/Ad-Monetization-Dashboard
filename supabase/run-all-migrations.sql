@@ -249,6 +249,9 @@ ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS website_url TEXT;
 ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS allow_adult BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE public.publishers ADD COLUMN IF NOT EXISTS allow_gambling BOOLEAN NOT NULL DEFAULT false;
 
+-- Preferred display currency (USD or BDT); all amounts stored in USD
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS preferred_currency TEXT DEFAULT 'USD' CHECK (preferred_currency IN ('USD', 'BDT'));
+
 -- ========== 5. Storage buckets and policies ==========
 -- If INSERT fails, create buckets in Dashboard: Storage -> New bucket -> excel-imports (private), invoices (private)
 INSERT INTO storage.buckets (id, name, public)

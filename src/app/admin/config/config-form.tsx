@@ -71,7 +71,7 @@ export function ConfigForm() {
       </div>
       <div>
         <label className="block text-sm font-medium text-gray-900 mb-1">
-          Expected monthly revenue ($)
+          Expected monthly revenue (USD)
         </label>
         <input
           type="number"

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { GenerateButton } from "./generate-button";
+import { FormattedMoney } from "@/components/currency/formatted-money";
 
 export default async function InvoicesPage() {
   const supabase = await createClient();
@@ -34,7 +35,7 @@ export default async function InvoicesPage() {
                 <td className="p-3 font-mono">{inv.invoice_number}</td>
                 <td className="p-3">{(inv.publishers as { name?: string })?.name}</td>
                 <td className="p-3">{inv.month}/{inv.year}</td>
-                <td className="p-3">${Number(inv.publisher_earnings).toFixed(2)}</td>
+                <td className="p-3"><FormattedMoney amountUsd={Number(inv.publisher_earnings)} /></td>
                 <td className="p-3">{inv.status}</td>
               </tr>
             ))}

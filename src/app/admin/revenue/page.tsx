@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/server";
 import { RevenuePageClient } from "./revenue-page-client";
 
 export default async function RevenuePage({
@@ -15,19 +14,10 @@ export default async function RevenuePage({
     ? parseInt(params.year, 10) || now.getFullYear()
     : now.getFullYear();
 
-  const supabase = await createClient();
-  const { data: configs } = await supabase
-    .from("monthly_config")
-    .select("month, year, real_data_imported_at")
-    .order("year", { ascending: false })
-    .order("month", { ascending: false })
-    .limit(24);
-
   return (
     <RevenuePageClient
       initialMonth={initialMonth}
       initialYear={initialYear}
-      configs={configs ?? []}
     />
   );
 }

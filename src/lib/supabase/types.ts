@@ -1,11 +1,14 @@
 export type Role = "super_admin" | "publisher";
 
+export type PreferredCurrency = "USD" | "BDT";
+
 export interface Profile {
   id: string;
   role: Role;
   publisher_id: string | null;
   full_name: string | null;
   avatar_url: string | null;
+  preferred_currency: PreferredCurrency | null;
   updated_at: string;
 }
 

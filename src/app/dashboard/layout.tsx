@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PublisherSupportIndicator } from "@/components/publisher-support-indicator";
+import { CurrencyProvider } from "@/components/currency/currency-provider";
+import { CurrencyToggle } from "@/components/currency/currency-toggle";
 
 export default async function DashboardLayout({
   children,
@@ -14,11 +16,21 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  let { data: profile } = await supabase
+  let { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role, publisher_id")
+    .select("role, publisher_id, preferred_currency")
     .eq("id", user.id)
     .single();
+
+  if (profileError) {
+    const { data: fallback } = await supabase
+      .from("profiles")
+      .select("role, publisher_id")
+      .eq("id", user.id)
+      .single();
+    profile = fallback ?? undefined;
+  }
+
   if (profile?.role === "super_admin") redirect("/admin");
   if (!profile?.publisher_id && user.email) {
     const { data: pub } = await supabase
@@ -34,6 +46,10 @@ export default async function DashboardLayout({
   if (!profile?.publisher_id) redirect("/login");
 
   const publisherId = profile.publisher_id;
+  const initialCurrency =
+    profile && "preferred_currency" in profile && profile.preferred_currency === "BDT"
+      ? "BDT"
+      : "USD";
 
   // Check if there are any unread admin messages for this publisher
   const { data: ticketsWithMessages } = await supabase
@@ -98,7 +114,14 @@ export default async function DashboardLayout({
           </button>
         </form>
       </aside>
-      <main className="flex-1 p-6 bg-gray-50 overflow-auto">{children}</main>
+      <main className="flex-1 p-6 bg-gray-50 overflow-auto">
+        <CurrencyProvider initialCurrency={initialCurrency}>
+          <div className="flex items-center justify-end gap-4 mb-4">
+            <CurrencyToggle />
+          </div>
+          {children}
+        </CurrencyProvider>
+      </main>
     </div>
   );
 }

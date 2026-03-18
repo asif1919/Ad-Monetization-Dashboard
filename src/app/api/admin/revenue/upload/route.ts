@@ -139,6 +139,9 @@ export async function POST(request: Request) {
     "0"
   )}-${String(endDate.getDate()).padStart(2, "0")}`;
 
+  // For this publisher and month we first remove any existing rows, then insert
+  // only the dates present in cleanedRows. We never generate placeholder rows
+  // for missing dates; reports will show only the dates that were uploaded.
   await supabase
     .from("daily_stats")
     .delete()

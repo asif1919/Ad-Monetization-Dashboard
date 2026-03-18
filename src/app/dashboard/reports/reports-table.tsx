@@ -1,5 +1,7 @@
 "use client";
 
+import { useCurrency } from "@/components/currency/currency-provider";
+
 type Row = {
   stat_date: string;
   impressions: number;
@@ -19,6 +21,7 @@ export function ReportsTable({
   to: string;
   summary: { impressions: number; clicks: number; revenue: number; ecpm: number };
 }) {
+  const { formatMoney } = useCurrency();
   return (
     <div className="space-y-4">
       <form method="get" className="flex flex-wrap gap-4 items-end">
@@ -47,6 +50,9 @@ export function ReportsTable({
           Apply
         </button>
       </form>
+      <p className="text-xs text-gray-600">
+        Showing only dates that have data in the selected range; missing dates are not generated.
+      </p>
       <div className="rounded-lg bg-white border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -64,8 +70,8 @@ export function ReportsTable({
                 <td className="p-3">{r.stat_date}</td>
                 <td className="p-3 text-right">{Number(r.impressions).toLocaleString()}</td>
                 <td className="p-3 text-right">{Number(r.clicks).toLocaleString()}</td>
-                <td className="p-3 text-right">${Number(r.revenue).toFixed(2)}</td>
-                <td className="p-3 text-right">${Number(r.ecpm).toFixed(2)}</td>
+                <td className="p-3 text-right">{formatMoney(Number(r.revenue))}</td>
+                <td className="p-3 text-right">{formatMoney(Number(r.ecpm))}</td>
               </tr>
             ))}
           </tbody>
@@ -74,8 +80,8 @@ export function ReportsTable({
               <td className="p-3">Total</td>
               <td className="p-3 text-right">{summary.impressions.toLocaleString()}</td>
               <td className="p-3 text-right">{summary.clicks.toLocaleString()}</td>
-              <td className="p-3 text-right">${summary.revenue.toFixed(2)}</td>
-              <td className="p-3 text-right">${summary.ecpm.toFixed(2)}</td>
+              <td className="p-3 text-right">{formatMoney(summary.revenue)}</td>
+              <td className="p-3 text-right">{formatMoney(summary.ecpm)}</td>
             </tr>
           </tfoot>
         </table>

@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { AdminSupportIndicator } from "@/components/admin-support-indicator";
+import { CurrencyProvider } from "@/components/currency/currency-provider";
+import { CurrencyToggle } from "@/components/currency/currency-toggle";
 
 export default async function AdminLayout({
   children,
@@ -14,12 +16,25 @@ export default async function AdminLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  let { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, preferred_currency")
     .eq("id", user.id)
     .single();
+
+  if (profileError) {
+    const { data: fallback } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    profile = fallback ?? undefined;
+  }
   if (profile?.role !== "super_admin") redirect("/dashboard");
+  const initialCurrency =
+    profile && "preferred_currency" in profile && profile.preferred_currency === "BDT"
+      ? "BDT"
+      : "USD";
 
   // Determine if there are any unread publisher messages for admin
   const { data: ticketsWithMessages } = await supabase
@@ -85,7 +100,14 @@ export default async function AdminLayout({
           </form>
         </div>
       </aside>
-      <main className="flex-1 p-6 bg-gray-50 overflow-auto">{children}</main>
+      <main className="flex-1 p-6 bg-gray-50 overflow-auto">
+        <CurrencyProvider initialCurrency={initialCurrency}>
+          <div className="flex items-center justify-end gap-4 mb-4">
+            <CurrencyToggle />
+          </div>
+          {children}
+        </CurrencyProvider>
+      </main>
     </div>
   );
 }

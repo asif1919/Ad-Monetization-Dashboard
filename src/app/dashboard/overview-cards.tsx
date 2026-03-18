@@ -1,10 +1,6 @@
 "use client";
 
-const CURRENCY = "৳";
-
-function formatMoney(n: number) {
-  return `${CURRENCY}${n.toFixed(2)}`;
-}
+import { useCurrency } from "@/components/currency/currency-provider";
 
 function formatPct(n: number) {
   return `${n.toFixed(2)}%`;
@@ -53,6 +49,7 @@ export function OverviewCards({
   impressionsGrowth: number;
   ecpmGrowth: number;
 }) {
+  const { formatMoney } = useCurrency();
   const fillRateGrowth = 0;
 
   return (

@@ -9,10 +9,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useCurrency } from "@/components/currency/currency-provider";
 
 type Row = { stat_date: string; revenue?: number; impressions?: number; ecpm?: number };
 
 export function RevenueChart({ data }: { data: Row[] }) {
+  const { formatMoney } = useCurrency();
   const chartData = data.map((d) => ({
     date: d.stat_date?.slice(5) ?? "",
     revenue: Number(d.revenue) ?? 0,
@@ -34,8 +36,8 @@ export function RevenueChart({ data }: { data: Row[] }) {
         <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
           <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
-          <Tooltip formatter={(v: number) => [`$${Number(v).toFixed(2)}`, "Revenue"]} />
+          <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => formatMoney(Number(v))} />
+          <Tooltip formatter={(v: number) => [formatMoney(Number(v)), "Revenue"]} />
           <Line
             type="monotone"
             dataKey="revenue"

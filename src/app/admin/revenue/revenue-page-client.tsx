@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ImportWizard } from "../import/import-wizard";
 
 type TargetRow = {
   publisher_id: string;
@@ -15,18 +14,6 @@ type TargetRow = {
   estimate_status?: "none" | "generated" | "skipped_real_data";
 };
 
-type PayoutRow = {
-  id: string;
-  publisher_id: string;
-  publisher_name: string;
-  publisher_email: string;
-  month: number;
-  year: number;
-  amount: number;
-  status: string;
-  paid_at: string | null;
-};
-
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
@@ -34,20 +21,16 @@ const YEARS = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
 export function RevenuePageClient({
   initialMonth,
   initialYear,
-  configs,
 }: {
   initialMonth: number;
   initialYear: number;
-  configs: { month: number; year: number; real_data_imported_at: string | null }[];
 }) {
   const router = useRouter();
   const [month, setMonth] = useState(initialMonth);
   const [year, setYear] = useState(initialYear);
   const [targets, setTargets] = useState<TargetRow[]>([]);
-  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
   const [realDataImportedAt, setRealDataImportedAt] = useState<string | null>(null);
   const [loadingTargets, setLoadingTargets] = useState(true);
-  const [loadingPayouts, setLoadingPayouts] = useState(true);
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editTargets, setEditTargets] = useState<Record<string, string>>({});
@@ -69,25 +52,9 @@ export function RevenuePageClient({
     }
   }, [month, year]);
 
-  const loadPayouts = useCallback(async () => {
-    setLoadingPayouts(true);
-    try {
-      const res = await fetch(
-        `/api/admin/revenue/payouts?month=${month}&year=${year}`
-      );
-      const data = await res.json();
-      if (res.ok) setPayouts(data.payouts ?? []);
-    } finally {
-      setLoadingPayouts(false);
-    }
-  }, [month, year]);
-
   useEffect(() => {
     loadTargets();
   }, [loadTargets]);
-  useEffect(() => {
-    loadPayouts();
-  }, [loadPayouts]);
 
   async function saveTarget(publisherId: string, value: string) {
     const num = parseFloat(value);
@@ -117,9 +84,21 @@ export function RevenuePageClient({
     }
   }
 
+  async function ensureAllTargetsSaved() {
+    // Save any edited monthly targets before generating estimates
+    for (const row of targets) {
+      const v = editTargets[row.publisher_id];
+      if (v != null && v !== "" && parseFloat(v) !== row.target_revenue) {
+        // eslint-disable-next-line no-await-in-loop
+        await saveTarget(row.publisher_id, v);
+      }
+    }
+  }
+
   async function generateEstimates() {
     setEstimateLoading(true);
     try {
+      await ensureAllTargetsSaved();
       const res = await fetch("/api/admin/revenue/estimate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -134,26 +113,18 @@ export function RevenuePageClient({
     }
   }
 
-  async function generateEstimateForPublisher(publisherId: string) {
+  async function generateEstimateForPublisher(row: TargetRow) {
+    const v = editTargets[row.publisher_id];
+    if (v != null && v !== "" && parseFloat(v) !== row.target_revenue) {
+      await saveTarget(row.publisher_id, v);
+    }
     const res = await fetch("/api/admin/revenue/estimate/publisher", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publisher_id: publisherId, month, year }),
+      body: JSON.stringify({ publisher_id: row.publisher_id, month, year }),
     });
     if (res.ok) {
       await loadTargets();
-      router.refresh();
-    }
-  }
-
-  async function markPayoutPaid(payoutId: string) {
-    const res = await fetch("/api/admin/revenue/payouts", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ payout_id: payoutId, status: "paid" }),
-    });
-    if (res.ok) {
-      await loadPayouts();
       router.refresh();
     }
   }
@@ -200,16 +171,9 @@ export function RevenuePageClient({
         </div>
       </div>
 
-      <p className="text-sm text-gray-600 max-w-2xl">
-        Set per-publisher monthly targets to drive estimated daily stats until
-        you upload real data. Uploading real data for a month replaces
-        estimated data for that month. Each publisher has a report ID like{" "}
-        <code className="px-1 rounded bg-gray-100 text-xs">Pub_0000123</code>{" "}
-        which should be used in your monthly Excel reports so rows map
-        correctly to publishers.
-      </p>
+      
 
-      {/* A. Per-publisher monthly targets */}
+      {/* Per-publisher monthly targets */}
       <section className="rounded-lg border border-gray-200 bg-white overflow-hidden">
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <h2 className="font-medium text-gray-900">
@@ -266,22 +230,6 @@ export function RevenuePageClient({
                             [t.publisher_id]: e.target.value,
                           }))
                         }
-                        onBlur={() => {
-                          const v =
-                            editTargets[t.publisher_id] ??
-                            (t.target_revenue > 0
-                              ? String(t.target_revenue)
-                              : "");
-                          if (v !== "" && parseFloat(v) !== t.target_revenue) {
-                            saveTarget(t.publisher_id, v);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const v = editTargets[t.publisher_id];
-                            if (v != null) saveTarget(t.publisher_id, v);
-                          }
-                        }}
                         placeholder="0"
                         className="w-28 rounded border border-gray-300 px-2 py-1 bg-white text-gray-900"
                       />
@@ -329,7 +277,7 @@ export function RevenuePageClient({
                           t.estimate_status === "skipped_real_data" ||
                           (t.target_revenue ?? 0) <= 0
                         }
-                        onClick={() => generateEstimateForPublisher(t.publisher_id)}
+                        onClick={() => generateEstimateForPublisher(t)}
                       >
                         Generate
                       </button>
@@ -345,89 +293,6 @@ export function RevenuePageClient({
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-      </section>
-
-      {/* B. Real data import (Excel) */}
-      <section className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <h2 className="font-medium text-gray-900">Import real data (Excel)</h2>
-        </div>
-        <div className="p-4">
-          <ImportWizard configs={configs} />
-        </div>
-      </section>
-
-      {/* C. Payouts overview */}
-      <section className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <h2 className="font-medium text-gray-900">Payouts</h2>
-        </div>
-        {loadingPayouts ? (
-          <p className="p-4 text-gray-600">Loading…</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left p-3">Publisher</th>
-                  <th className="text-left p-3">Amount</th>
-                  <th className="text-left p-3">Status</th>
-                  <th className="text-left p-3">Paid at</th>
-                  <th className="text-left p-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payouts.map((p) => (
-                  <tr key={p.id} className="border-b border-gray-100">
-                    <td className="p-3">
-                      <span className="font-medium">{p.publisher_name}</span>
-                      <br />
-                      <span className="text-gray-600 text-xs">
-                        {p.publisher_email}
-                      </span>
-                    </td>
-                    <td className="p-3">${p.amount.toFixed(2)}</td>
-                    <td className="p-3">
-                      <span
-                        className={
-                          p.status === "paid"
-                            ? "text-green-600"
-                            : "text-amber-600"
-                        }
-                      >
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      {p.paid_at
-                        ? new Date(p.paid_at).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td className="p-3">
-                      {p.status === "paid" ? (
-                        <span className="text-gray-500">—</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => markPayoutPaid(p.id)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          Mark paid
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {payouts.length === 0 && (
-              <p className="p-4 text-gray-600">
-                No payouts for this month. Payouts are created when you
-                generate invoices or from revenue data.
-              </p>
-            )}
           </div>
         )}
       </section>

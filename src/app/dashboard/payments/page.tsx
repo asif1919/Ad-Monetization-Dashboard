@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { InvoiceDownload } from "./invoice-download";
+import { FormattedMoney } from "@/components/currency/formatted-money";
 
 export default async function PaymentsPage() {
   const supabase = await createClient();
@@ -33,8 +34,8 @@ export default async function PaymentsPage() {
       {nextPending && (
         <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 mb-6">
           <p className="text-sm text-blue-800">
-            Next payout: {nextPending.month}/{nextPending.year} — $
-            {Number(nextPending.amount).toFixed(2)} (pending)
+            Next payout: {nextPending.month}/{nextPending.year} —{" "}
+            <FormattedMoney amountUsd={Number(nextPending.amount)} /> (pending)
           </p>
         </div>
       )}
@@ -55,7 +56,7 @@ export default async function PaymentsPage() {
             {(payouts ?? []).map((p) => (
               <tr key={p.id} className="border-b border-gray-100">
                 <td className="p-3">{p.month}/{p.year}</td>
-                <td className="p-3">${Number(p.amount).toFixed(2)}</td>
+                <td className="p-3"><FormattedMoney amountUsd={Number(p.amount)} /></td>
                 <td className="p-3">
                   <span className={p.status === "paid" ? "text-green-600" : "text-amber-600"}>
                     {p.status}

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { PayoutActions } from "./payout-actions";
+import { FormattedMoney } from "@/components/currency/formatted-money";
 
 export default async function PayoutsPage() {
   const supabase = await createClient();
@@ -34,7 +35,7 @@ export default async function PayoutsPage() {
                   <span className="text-gray-600 text-xs">{(p.publishers as { email?: string })?.email}</span>
                 </td>
                 <td className="p-3">{p.month}/{p.year}</td>
-                <td className="p-3">${Number(p.amount).toFixed(2)}</td>
+                <td className="p-3"><FormattedMoney amountUsd={Number(p.amount)} /></td>
                 <td className="p-3">
                   <span className={p.status === "paid" ? "text-green-600" : "text-amber-600"}>
                     {p.status}

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
+import { FormattedMoney } from "@/components/currency/formatted-money";
 
 export default async function AdminOverviewPage() {
   const supabase = await createClient();
@@ -71,13 +72,13 @@ export default async function AdminOverviewPage() {
         <div className="rounded-lg bg-white p-4 shadow border border-gray-200">
           <p className="text-sm text-gray-700">Network revenue (today)</p>
           <p className="text-2xl font-semibold">
-            ${todayRevenue.toFixed(2)}
+            <FormattedMoney amountUsd={todayRevenue} />
           </p>
         </div>
         <div className="rounded-lg bg-white p-4 shadow border border-gray-200">
           <p className="text-sm text-gray-700">Network revenue (this month)</p>
           <p className="text-2xl font-semibold">
-            ${monthRevenue.toFixed(2)}
+            <FormattedMoney amountUsd={monthRevenue} />
           </p>
         </div>
         <div className="rounded-lg bg-white p-4 shadow border border-gray-200">
@@ -89,13 +90,13 @@ export default async function AdminOverviewPage() {
         <div className="rounded-lg bg-white p-4 shadow border border-gray-200">
           <p className="text-sm text-gray-700">Average eCPM (this month)</p>
           <p className="text-2xl font-semibold">
-            ${avgEcpm.toFixed(2)}
+            <FormattedMoney amountUsd={avgEcpm} />
           </p>
         </div>
         <div className="rounded-lg bg-white p-4 shadow border border-gray-200">
           <p className="text-sm text-gray-700">Pending payouts</p>
           <p className="text-2xl font-semibold">
-            {pendingPayoutsCount} · ${pendingPayoutsAmount.toFixed(2)}
+            {pendingPayoutsCount} · <FormattedMoney amountUsd={pendingPayoutsAmount} />
           </p>
         </div>
         <div className="rounded-lg bg-white p-4 shadow border border-gray-200">
@@ -121,7 +122,7 @@ export default async function AdminOverviewPage() {
                 <td className="p-3">
                   {c.month}/{c.year}
                 </td>
-                <td className="p-3">${Number(c.expected_revenue).toFixed(2)}</td>
+                <td className="p-3"><FormattedMoney amountUsd={Number(c.expected_revenue)} /></td>
                 <td className="p-3">
                   {c.real_data_imported_at
                     ? new Date(c.real_data_imported_at).toLocaleDateString()

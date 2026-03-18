@@ -9,11 +9,13 @@ import {
   type ColumnMapping,
   parseDate,
 } from "@/lib/import-excel";
+import { useCurrency } from "@/components/currency/currency-provider";
 
 type Config = { month: number; year: number; real_data_imported_at: string | null };
 
 export function ImportWizard({ configs }: { configs: Config[] }) {
   const router = useRouter();
+  const { formatMoney } = useCurrency();
   const [step, setStep] = useState<"upload" | "map" | "preview" | "done">("upload");
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<unknown[][]>([]);
@@ -215,7 +217,11 @@ export function ImportWizard({ configs }: { configs: Config[] }) {
                     <td className="p-2">{r.publisher_id ?? r.publisher_email ?? "—"}</td>
                     <td className="p-2">{r.impressions ?? "—"}</td>
                     <td className="p-2">{r.clicks ?? "—"}</td>
-                    <td className="p-2">{r.revenue ?? "—"}</td>
+                    <td className="p-2">
+                      {typeof r.revenue === "number" && Number.isFinite(r.revenue)
+                        ? formatMoney(r.revenue)
+                        : r.revenue ?? "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -26,6 +26,8 @@ export default async function ReportsPage({
   const fromDate = from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const toDate = to ?? new Date().toISOString().slice(0, 10);
 
+  // Note: this query returns only dates that have stored rows in daily_stats.
+  // We do not generate placeholder rows for missing dates in the range.
   const { data: rows } = await supabase
     .from("daily_stats")
     .select("stat_date, impressions, clicks, revenue, ecpm")

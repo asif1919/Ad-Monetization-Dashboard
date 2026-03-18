@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { ImportWizard } from "../import/import-wizard";
+import { FormattedMoney } from "@/components/currency/formatted-money";
 
 export default async function AdminConfigPage() {
   const supabase = await createClient();
@@ -39,9 +40,11 @@ export default async function AdminConfigPage() {
                       {String(c.month).padStart(2, "0")}/{c.year}
                     </td>
                     <td className="p-2">
-                      {typeof c.expected_revenue === "number"
-                        ? `$${Number(c.expected_revenue).toFixed(2)}`
-                        : "—"}
+                      {typeof c.expected_revenue === "number" ? (
+                        <FormattedMoney amountUsd={Number(c.expected_revenue)} />
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="p-2 text-gray-600">
                       {c.real_data_imported_at
