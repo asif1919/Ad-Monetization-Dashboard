@@ -24,8 +24,16 @@ export default async function ReportsPage({
   if (!publisherId) redirect("/login");
 
   const { from, to } = await searchParams;
-  const fromDate = from ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const toDate = to ?? new Date().toISOString().slice(0, 10);
+  const nowLocal = new Date();
+  const toDate =
+    to ?? nowLocal.toISOString().slice(0, 10);
+  const fromDate =
+    from ??
+    new Date(
+      nowLocal.getTime() - 30 * 24 * 60 * 60 * 1000
+    )
+      .toISOString()
+      .slice(0, 10);
 
   // Note: this query returns only dates that have stored rows in daily_stats.
   // We do not generate placeholder rows for missing dates in the range.
@@ -38,10 +46,9 @@ export default async function ReportsPage({
     .order("stat_date", { ascending: false })
     .limit(500);
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
   const now = new Date();
   const rows = (rawRows ?? []).map((r) => {
-    if (r.stat_date === todayUtc && r.time_segments && Array.isArray(r.time_segments)) {
+    if (r.stat_date === toDate && r.time_segments && Array.isArray(r.time_segments)) {
       const effective = getEffectiveStatsAtTime(
         {
           stat_date: r.stat_date,
@@ -50,7 +57,8 @@ export default async function ReportsPage({
           clicks: Number(r.clicks) ?? 0,
           time_segments: r.time_segments,
         },
-        now
+        now,
+        toDate
       );
       const ecpm =
         effective.impressions > 0

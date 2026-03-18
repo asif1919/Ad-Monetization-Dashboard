@@ -89,8 +89,27 @@ export type RowWithSegments = {
   revenue: number;
   impressions: number;
   clicks: number;
-  time_segments?: TimeSegment[] | null;
+  time_segments?: TimeSegment[] | string | null;
 };
+
+/** Normalize time_segments from DB (may be JSON string or double-stringified) to TimeSegment[]. */
+function parseSegments(raw: TimeSegment[] | string | null | undefined): TimeSegment[] | null {
+  if (raw == null) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw !== "string") return null;
+  try {
+    let parsed = JSON.parse(raw) as unknown;
+    // DB sometimes returns double-stringified JSON: "[{\"end\":\"01:14\"...}]"
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(parsed) as unknown;
+    }
+    return Array.isArray(parsed) ? (parsed as TimeSegment[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+const LOG_PROGRESSIVE = process.env.NODE_ENV !== "production" || process.env.LOG_PROGRESSIVE === "1";
 
 /**
  * Returns effective revenue, impressions, clicks to display for a row.
@@ -99,40 +118,181 @@ export type RowWithSegments = {
  */
 export function getEffectiveStatsAtTime(
   row: RowWithSegments,
-  now: Date
-): { revenue: number; impressions: number; clicks: number } {
-  const segments = row.time_segments;
-  if (!segments || segments.length === 0)
-    return {
-      revenue: Number(row.revenue) || 0,
-      impressions: Number(row.impressions) || 0,
-      clicks: Number(row.clicks) || 0,
-    };
+  now: Date,
+  todayOverride?: string
+): { revenue: number; impressions: number; clicks: number; hadError?: boolean } {
+  const todayUtc = todayOverride ?? now.toISOString().slice(0, 10);
+  const isToday = row.stat_date === todayUtc;
 
-  const todayUtc = now.toISOString().slice(0, 10);
-  if (row.stat_date !== todayUtc)
+  const segments = parseSegments(row.time_segments);
+  if (!segments || segments.length === 0) {
+    if (LOG_PROGRESSIVE) {
+      console.log(
+        isToday
+          ? "[getEffectiveStatsAtTime] error: missing/invalid segments for today"
+          : "[getEffectiveStatsAtTime] full-day (no segments, not today)",
+        {
+          stat_date: row.stat_date,
+          todayOverride,
+          rawType: typeof row.time_segments,
+          rawIsArray: Array.isArray(row.time_segments),
+        }
+      );
+    }
+    // Never fall back to full-day totals for "today" if segments are missing/invalid.
+    if (isToday) {
+      return { revenue: 0, impressions: 0, clicks: 0, hadError: true };
+    }
     return {
       revenue: Number(row.revenue) || 0,
       impressions: Number(row.impressions) || 0,
       clicks: Number(row.clicks) || 0,
     };
+  }
+
+  if (!isToday) {
+    if (LOG_PROGRESSIVE) {
+      console.log("[getEffectiveStatsAtTime] full-day (not today)", {
+        stat_date: row.stat_date,
+        todayUtc,
+      });
+    }
+    return {
+      revenue: Number(row.revenue) || 0,
+      impressions: Number(row.impressions) || 0,
+      clicks: Number(row.clicks) || 0,
+    };
+  }
+
+  // Progressive cutoff only when the current UTC date equals the selected day.
+  // Otherwise: future day → 0; past day → full-day totals.
+  const nowDateStr = now.toISOString().slice(0, 10);
+  if (nowDateStr < todayUtc) {
+    if (LOG_PROGRESSIVE) {
+      console.log("[getEffectiveStatsAtTime] zero (selected day is in future)", {
+        stat_date: row.stat_date,
+        nowDateStr,
+        todayUtc,
+      });
+    }
+    return { revenue: 0, impressions: 0, clicks: 0 };
+  }
+  if (nowDateStr > todayUtc) {
+    if (LOG_PROGRESSIVE) {
+      console.log("[getEffectiveStatsAtTime] full-day (selected day is in past)", {
+        stat_date: row.stat_date,
+        nowDateStr,
+        todayUtc,
+      });
+    }
+    return {
+      revenue: Number(row.revenue) || 0,
+      impressions: Number(row.impressions) || 0,
+      clicks: Number(row.clicks) || 0,
+    };
+  }
 
   const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-
   let revenue = 0,
     impressions = 0,
     clicks = 0;
+  let included = 0;
   for (const seg of segments) {
     if (timeToMinutes(seg.end) <= nowMinutes) {
       revenue += Number(seg.revenue) || 0;
       impressions += Number(seg.impressions) || 0;
       clicks += Number(seg.clicks) || 0;
+      included++;
     }
   }
+
+  if (LOG_PROGRESSIVE) {
+    console.log("[getEffectiveStatsAtTime] progressive", {
+      stat_date: row.stat_date,
+      todayOverride,
+      nowUtc: now.toISOString().slice(0, 16),
+      nowMinutes,
+      segmentsTotal: segments.length,
+      segmentsIncluded: included,
+      fullDayRevenue: Number(row.revenue) || 0,
+      effectiveRevenue: revenue,
+      fullDayImpressions: Number(row.impressions) || 0,
+      effectiveImpressions: impressions,
+    });
+  }
+
   return { revenue, impressions, clicks };
 }
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(":").map(Number);
   return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/** Format local date as YYYY-MM-DD (user's timezone). */
+function localDateString(now: Date): string {
+  const y = now.getFullYear();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+/**
+ * Same as getEffectiveStatsAtTime but uses the user's LOCAL date and time.
+ * Use this in the browser so "3 AM" means 3 AM in the user's timezone.
+ * - If selected date is in the future (local) → 0.
+ * - If selected date is in the past (local) → full-day totals.
+ * - If selected date is today (local) → sum of segments with end <= current local time.
+ */
+export function getEffectiveStatsAtTimeLocal(
+  row: RowWithSegments,
+  now: Date,
+  selectedDate: string
+): { revenue: number; impressions: number; clicks: number; hadError?: boolean } {
+  const segments = parseSegments(row.time_segments);
+  const localDateStr = localDateString(now);
+  const isSelectedDay = row.stat_date === selectedDate;
+
+  if (!segments || segments.length === 0) {
+    if (isSelectedDay) {
+      return { revenue: 0, impressions: 0, clicks: 0, hadError: true };
+    }
+    return {
+      revenue: Number(row.revenue) || 0,
+      impressions: Number(row.impressions) || 0,
+      clicks: Number(row.clicks) || 0,
+    };
+  }
+
+  if (!isSelectedDay) {
+    return {
+      revenue: Number(row.revenue) || 0,
+      impressions: Number(row.impressions) || 0,
+      clicks: Number(row.clicks) || 0,
+    };
+  }
+
+  if (localDateStr < selectedDate) {
+    return { revenue: 0, impressions: 0, clicks: 0 };
+  }
+  if (localDateStr > selectedDate) {
+    return {
+      revenue: Number(row.revenue) || 0,
+      impressions: Number(row.impressions) || 0,
+      clicks: Number(row.clicks) || 0,
+    };
+  }
+
+  const localMinutes = now.getHours() * 60 + now.getMinutes();
+  let revenue = 0,
+    impressions = 0,
+    clicks = 0;
+  for (const seg of segments) {
+    if (timeToMinutes(seg.end) <= localMinutes) {
+      revenue += Number(seg.revenue) || 0;
+      impressions += Number(seg.impressions) || 0;
+      clicks += Number(seg.clicks) || 0;
+    }
+  }
+  return { revenue, impressions, clicks };
 }

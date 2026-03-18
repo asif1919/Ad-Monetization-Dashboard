@@ -54,10 +54,9 @@ export async function GET(request: Request) {
     .lte("stat_date", endDate)
     .order("stat_date");
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
   const now = new Date();
   const rows = (rawRows ?? []).map((r) => {
-    if (r.stat_date === todayUtc && r.time_segments && Array.isArray(r.time_segments)) {
+    if (r.stat_date === endDate && r.time_segments && Array.isArray(r.time_segments)) {
       const effective = getEffectiveStatsAtTime(
         {
           stat_date: r.stat_date,
@@ -66,7 +65,8 @@ export async function GET(request: Request) {
           clicks: Number(r.clicks) ?? 0,
           time_segments: r.time_segments,
         },
-        now
+        now,
+        endDate
       );
       const ecpm =
         effective.impressions > 0
