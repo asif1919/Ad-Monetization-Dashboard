@@ -3,15 +3,12 @@ import { redirect } from "next/navigation";
 import { OverviewCards } from "./overview-cards";
 import { RevenueChart } from "./revenue-chart";
 import { getEffectiveStatsAtTime } from "@/lib/time-segments";
-import { OverviewDateSelector } from "./date-selector";
+import { CurrentDateLabel } from "./current-date-label";
+import { MonthlyDataTable } from "./monthly-table";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardOverviewPage({
-  searchParams,
-}: {
-  searchParams?: { date?: string };
-}) {
+export default async function DashboardOverviewPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -26,40 +23,29 @@ export default async function DashboardOverviewPage({
   const publisherId = profile?.publisher_id;
   if (!publisherId) redirect("/login");
 
-  const params = await searchParams;
-  const nowLocal = new Date();
-  const selectedDateStr = params?.date ?? nowLocal.toISOString().slice(0, 10);
-  const selectedDate = new Date(selectedDateStr);
-  if (Number.isNaN(selectedDate.getTime())) {
-    selectedDate.setTime(nowLocal.getTime());
-  }
-
-  const today = selectedDate.toISOString().slice(0, 10);
-  const yesterday = new Date(selectedDate);
-  yesterday.setDate(selectedDate.getDate() - 1);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const anchor = new Date(today + "T12:00:00.000Z");
+  const yesterday = new Date(anchor);
+  yesterday.setUTCDate(anchor.getUTCDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
   const startOfMonth = new Date(
-    selectedDate.getFullYear(),
-    selectedDate.getMonth(),
-    1
+    Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1)
   );
   const monthStart = startOfMonth.toISOString().slice(0, 10);
-  const last30 = new Date(selectedDate);
-  last30.setDate(selectedDate.getDate() - 30);
-  const last30Start = last30.toISOString().slice(0, 10);
-  const now = new Date();
-  const realToday = now.toISOString().slice(0, 10);
-  const chartLast30 = new Date(realToday + "T00:00:00Z");
+  const chartLast30 = new Date(today + "T00:00:00Z");
   chartLast30.setUTCDate(chartLast30.getUTCDate() - 30);
   const chartLast30Start = chartLast30.toISOString().slice(0, 10);
-  const prevMonthStart = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth() - 1, 1);
-  const prevMonthEnd = new Date(startOfMonth.getFullYear(), startOfMonth.getMonth(), 0);
+  const realToday = today;
+  const y = anchor.getUTCFullYear();
+  const m = anchor.getUTCMonth();
+  const prevMonthStart = new Date(Date.UTC(y, m - 1, 1));
+  const prevMonthEnd = new Date(Date.UTC(y, m, 0));
   const prevMonthStartStr = prevMonthStart.toISOString().slice(0, 10);
   const prevMonthEndStr = prevMonthEnd.toISOString().slice(0, 10);
 
   if (process.env.NODE_ENV !== "production" || process.env.LOG_PROGRESSIVE === "1") {
     console.log("[dashboard/overview]", {
-      selectedDateStr,
       today,
       nowUtc: now.toISOString().slice(0, 16),
       nowMinutes: now.getUTCHours() * 60 + now.getUTCMinutes(),
@@ -202,6 +188,24 @@ export default async function DashboardOverviewPage({
     prevMonthImpressions > 0
       ? (prevMonthRevenue / prevMonthImpressions) * 1000
       : 0;
+  const monthlyEcpc = monthlyClicks > 0 ? monthlyRevenue / monthlyClicks : 0;
+  const todayEcpc = todayClicks > 0 ? todayRevenue / todayClicks : 0;
+  const yesterdayEcpc =
+    yesterdayClicks > 0 ? yesterdayRevenue / yesterdayClicks : 0;
+  const prevMonthEcpc =
+    prevMonthClicks > 0 ? prevMonthRevenue / prevMonthClicks : 0;
+  const monthlyCtr =
+    monthlyImpressions > 0 ? (monthlyClicks / monthlyImpressions) * 100 : 0;
+  const todayCtr =
+    todayImpressions > 0 ? (todayClicks / todayImpressions) * 100 : 0;
+  const yesterdayCtr =
+    yesterdayImpressions > 0
+      ? (yesterdayClicks / yesterdayImpressions) * 100
+      : 0;
+  const prevMonthCtr =
+    prevMonthImpressions > 0
+      ? (prevMonthClicks / prevMonthImpressions) * 100
+      : 0;
   const revenueGrowth =
     prevMonthRevenue > 0
       ? ((monthlyRevenue - prevMonthRevenue) / prevMonthRevenue) * 100
@@ -218,6 +222,12 @@ export default async function DashboardOverviewPage({
     prevMonthEcpm > 0
       ? ((monthlyEcpm - prevMonthEcpm) / prevMonthEcpm) * 100
       : 0;
+  const ecpcGrowth =
+    prevMonthEcpc > 0
+      ? ((monthlyEcpc - prevMonthEcpc) / prevMonthEcpc) * 100
+      : 0;
+  const ctrGrowth =
+    prevMonthCtr > 0 ? ((monthlyCtr - prevMonthCtr) / prevMonthCtr) * 100 : 0;
 
   chartData = chartData.map(
     (d: {
@@ -276,14 +286,7 @@ export default async function DashboardOverviewPage({
           </span>
         )}
       </div>
-      <p className="text-xs text-gray-600 mb-2">
-        {selectedDate.toLocaleDateString(undefined, {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        })}
-      </p>
-      <OverviewDateSelector />
+      <CurrentDateLabel />
       <OverviewCards
         rawTodayStats={
           todayStats
@@ -310,10 +313,18 @@ export default async function DashboardOverviewPage({
         todayEcpm={todayEcpm}
         yesterdayEcpm={yesterdayEcpm}
         monthlyEcpm={monthlyEcpm}
+        todayEcpc={todayEcpc}
+        yesterdayEcpc={yesterdayEcpc}
+        monthlyEcpc={monthlyEcpc}
+        todayCtr={todayCtr}
+        yesterdayCtr={yesterdayCtr}
+        monthlyCtr={monthlyCtr}
         revenueGrowth={revenueGrowth}
         impressionsGrowth={impressionsGrowth}
         clicksGrowth={clicksGrowth}
         ecpmGrowth={ecpmGrowth}
+        ecpcGrowth={ecpcGrowth}
+        ctrGrowth={ctrGrowth}
       />
       <div className="mt-8">
         <div className="flex items-center gap-2 mb-4">
@@ -326,6 +337,7 @@ export default async function DashboardOverviewPage({
         </div>
         <RevenueChart data={chartData ?? []} />
       </div>
+      <MonthlyDataTable />
     </div>
   );
 }

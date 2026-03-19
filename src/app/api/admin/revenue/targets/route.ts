@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
   const { data: publishers } = await supabase
     .from("publishers")
-    .select("id, name, email, public_id, status")
+    .select("id, name, email, public_id, status, created_at")
     .order("name");
 
   const { data: targets } = await supabase
@@ -118,6 +118,7 @@ export async function GET(request: Request) {
       name: p.name,
       email: p.email,
       public_id: p.public_id ?? null,
+      created_at: p.created_at as string,
       is_active: p.status === "active",
       target_revenue: target?.target_revenue ?? 0,
       target_id: target?.id ?? null,

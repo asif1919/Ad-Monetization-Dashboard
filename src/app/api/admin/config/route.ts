@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { distributeMonthlyRevenue } from "@/lib/estimates";
+import {
+  distributeMonthlyRevenue,
+  getFirstActiveStatDayInMonth,
+} from "@/lib/estimates";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -58,12 +61,17 @@ export async function POST(request: Request) {
   // Get all active publishers with revenue share
   const { data: publishers } = await supabase
     .from("publishers")
-    .select("id, revenue_share_pct")
+    .select("id, revenue_share_pct, created_at")
     .eq("status", "active");
 
   const revenueShareByPublisher = (publishers ?? []).map((p) => ({
     publisher_id: p.id,
     revenue_share_pct: Number(p.revenue_share_pct),
+    firstActiveDay: getFirstActiveStatDayInMonth(
+      p.created_at as string | undefined,
+      year,
+      month
+    ),
   }));
 
   const rows = distributeMonthlyRevenue(

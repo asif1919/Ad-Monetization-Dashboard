@@ -7,6 +7,71 @@ export type DailyEstimateRow = {
   is_estimated: true;
 };
 
+/**
+ * First calendar day (1–31) in `year`/`month` that should have stats for this publisher,
+ * based on `publishers.created_at` (UTC date). Days before this in the month have no rows.
+ * Returns `daysInMonth + 1` if the publisher did not exist yet during that month.
+ */
+export function getFirstActiveStatDayInMonth(
+  publisherCreatedAt: string | null | undefined,
+  year: number,
+  month: number
+): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (!publisherCreatedAt) return 1;
+
+  const created = new Date(publisherCreatedAt);
+  if (Number.isNaN(created.getTime())) return 1;
+
+  const cy = created.getUTCFullYear();
+  const cm = created.getUTCMonth() + 1;
+  const cd = created.getUTCDate();
+
+  if (year < cy || (year === cy && month < cm)) {
+    return daysInMonth + 1;
+  }
+  if (year > cy || month > cm) {
+    return 1;
+  }
+  return Math.min(cd, daysInMonth);
+}
+
+/**
+ * Resolve inclusive day-of-month range for estimates.
+ * Admin overrides are clamped to the month; the range cannot start before the publisher existed.
+ * Returns null if there is no valid range.
+ */
+export function resolvePublisherStatRange(
+  publisherCreatedAt: string | null | undefined,
+  year: number,
+  month: number,
+  adminStartDay?: number | null,
+  adminEndDay?: number | null
+): { first: number; last: number } | null {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const earliest = getFirstActiveStatDayInMonth(
+    publisherCreatedAt,
+    year,
+    month
+  );
+  if (earliest > daysInMonth) return null;
+
+  let first = earliest;
+  let last = daysInMonth;
+
+  if (adminStartDay != null && Number.isFinite(adminStartDay)) {
+    const a = Math.max(1, Math.min(daysInMonth, Math.floor(Number(adminStartDay))));
+    first = Math.max(earliest, a);
+  }
+  if (adminEndDay != null && Number.isFinite(adminEndDay)) {
+    const b = Math.max(1, Math.min(daysInMonth, Math.floor(Number(adminEndDay))));
+    last = b;
+  }
+
+  if (first > last) return null;
+  return { first, last };
+}
+
 // Simple deterministic PRNG so daily patterns are stable for a given
 // (publisher_id, year, month) combination.
 function makeRng(seed: string) {
@@ -24,24 +89,45 @@ function makeRng(seed: string) {
   };
 }
 
+export type DistributePublisherOptions = {
+  /** First day of month (1–31) to include; default 1. Earlier days get no rows. */
+  firstActiveDay?: number;
+  /** Last day of month (1–31) to include; default last day of month. */
+  lastActiveDay?: number;
+};
+
 /**
  * Generate estimated daily stats for one publisher for a month, with varying
  * daily revenue (weekday/weekend pattern + noise) that sums to target_revenue.
+ * Only days from `firstActiveDay` through `lastActiveDay` (inclusive) are generated; the full
+ * target is spread across those active days only.
  */
 export function distributePublisherTargetRevenue(
   publisherId: string,
   targetRevenue: number,
   year: number,
-  month: number
+  month: number,
+  options?: DistributePublisherOptions
 ): DailyEstimateRow[] {
   const daysInMonth = new Date(year, month, 0).getDate();
+  const firstActiveDay = Math.max(1, options?.firstActiveDay ?? 1);
   if (daysInMonth === 0 || targetRevenue <= 0) return [];
+  if (firstActiveDay > daysInMonth) return [];
 
-  const rng = makeRng(`${publisherId}-${year}-${month}`);
+  const lastActiveDay = Math.min(
+    daysInMonth,
+    Math.max(firstActiveDay, options?.lastActiveDay ?? daysInMonth)
+  );
+  const activeCount = lastActiveDay - firstActiveDay + 1;
+  if (activeCount <= 0) return [];
+
+  const rng = makeRng(
+    `${publisherId}-${year}-${month}-${firstActiveDay}-${lastActiveDay}`
+  );
 
   // Step 1–3: weekday/weekend base, smooth monthly trend, and stronger noise
   const rawWeights: number[] = [];
-  for (let day = 1; day <= daysInMonth; day++) {
+  for (let day = firstActiveDay; day <= lastActiveDay; day++) {
     const d = new Date(year, month - 1, day);
     const dayOfWeek = d.getDay(); // 0 = Sun, 6 = Sat
     let base: number;
@@ -52,7 +138,7 @@ export function distributePublisherTargetRevenue(
     } else {
       base = 1.2 + 0.2 * rng.next(); // Mon–Thu
     }
-    const t = day / daysInMonth;
+    const t = (day - firstActiveDay + 1) / activeCount;
     const trend = 1 + 0.4 * Math.sin(2 * Math.PI * t);
     const noise = 0.5 + 1.3 * rng.next(); // 0.5–1.8
     const w = Math.max(0.01, base * trend * noise);
@@ -60,7 +146,7 @@ export function distributePublisherTargetRevenue(
   }
 
   // Step 4: explicit spike and slow days
-  const indices = Array.from({ length: daysInMonth }, (_, i) => i);
+  const indices = Array.from({ length: activeCount }, (_, i) => i);
   const pickDistinct = (count: number) => {
     const picked: number[] = [];
     const pool = [...indices];
@@ -102,11 +188,12 @@ export function distributePublisherTargetRevenue(
 
   const rows: DailyEstimateRow[] = [];
   let accRevenue = 0;
-  for (let day = 1; day <= daysInMonth; day++) {
+  for (let i = 0; i < activeCount; i++) {
+    const day = firstActiveDay + i;
     const statDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    let revenue = targetRevenue * normalized[day - 1];
-    // Adjust last day to absorb rounding differences so sum matches targetRevenue
-    if (day === daysInMonth) {
+    let revenue = targetRevenue * normalized[i];
+    // Adjust last active day to absorb rounding differences so sum matches targetRevenue
+    if (i === activeCount - 1) {
       revenue = targetRevenue - accRevenue;
     }
     accRevenue += revenue;
@@ -137,13 +224,18 @@ export function distributePublisherTargetRevenue(
 /**
  * Distribute expected monthly revenue across days of the month per publisher.
  * Each publisher gets (expected_revenue * revenue_share_pct / 100) for the month,
- * distributed equally across days.
+ * spread only across days from `firstActiveDay` (default 1) through month-end.
  */
 export function distributeMonthlyRevenue(
   expectedRevenue: number,
   year: number,
   month: number,
-  revenueShareByPublisher: Array<{ publisher_id: string; revenue_share_pct: number }>
+  revenueShareByPublisher: Array<{
+    publisher_id: string;
+    revenue_share_pct: number;
+    /** First day of month (1–31) with stats; omit or 1 = whole month */
+    firstActiveDay?: number;
+  }>
 ): {
   stat_date: string;
   publisher_id: string;
@@ -160,10 +252,15 @@ export function distributeMonthlyRevenue(
 
   for (let day = 1; day <= daysInMonth; day++) {
     const statDate = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    for (const { publisher_id, revenue_share_pct } of revenueShareByPublisher) {
+    for (const { publisher_id, revenue_share_pct, firstActiveDay = 1 } of revenueShareByPublisher) {
+      const start = Math.max(1, firstActiveDay);
+      if (day < start) continue;
+      const activeDays = daysInMonth - start + 1;
+      if (activeDays <= 0) continue;
+
       const publisherMonthTotal =
         (expectedRevenue * revenue_share_pct) / 100;
-      const revenue = publisherMonthTotal / daysInMonth;
+      const revenue = publisherMonthTotal / activeDays;
       // Placeholder impressions (e.g. proportional to revenue for eCPM display)
       const impressions = Math.round(revenue * 400); // arbitrary scale
       rows.push({

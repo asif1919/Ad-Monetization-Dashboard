@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { distributePublisherTargetRevenue } from "@/lib/estimates";
+import {
+  distributePublisherTargetRevenue,
+  resolvePublisherStatRange,
+} from "@/lib/estimates";
 import { buildTimeSegments } from "@/lib/time-segments";
 
 export async function POST(request: Request) {
@@ -19,10 +22,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { publisher_id, month, year } = body as {
+  const { publisher_id, month, year, start_day, end_day } = body as {
     publisher_id?: string;
     month?: number;
     year?: number;
+    /** Optional inclusive day-of-month overrides (1–31) */
+    start_day?: number | null;
+    end_day?: number | null;
   };
   if (
     !publisher_id ||
@@ -76,6 +82,21 @@ export async function POST(request: Request) {
     });
   }
 
+  const { data: pub } = await supabase
+    .from("publishers")
+    .select("created_at")
+    .eq("id", publisher_id)
+    .maybeSingle();
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const range = resolvePublisherStatRange(
+    pub?.created_at as string | undefined,
+    year,
+    month,
+    start_day,
+    end_day
+  );
+
   await supabase
     .from("daily_stats")
     .delete()
@@ -84,7 +105,18 @@ export async function POST(request: Request) {
     .lte("stat_date", endDate)
     .eq("is_estimated", true);
 
-  const rows = distributePublisherTargetRevenue(publisher_id, amount, year, month);
+  if (!range) {
+    return NextResponse.json({
+      skipped: true,
+      reason: "publisher_not_active_this_month",
+      inserted_count: 0,
+    });
+  }
+
+  const rows = distributePublisherTargetRevenue(publisher_id, amount, year, month, {
+    firstActiveDay: range.first,
+    lastActiveDay: range.last,
+  });
   const toInsert = rows.map((r) => {
     const time_segments = buildTimeSegments(
       r.revenue,
