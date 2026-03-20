@@ -1,12 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  validatePublisherUploadRows,
+  type RevenueUploadInputRow,
+} from "@/lib/revenue-upload";
 import { NextResponse } from "next/server";
-
-type Row = {
-  date: string | null;
-  impressions: number;
-  clicks: number;
-  revenue: number;
-};
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -24,12 +21,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { month, year, publisher_id, publisher_public_id, rows } = body as {
+  const {
+    mode = "commit",
+    month,
+    year,
+    publisher_id,
+    publisher_public_id,
+    rows,
+  } = body as {
+    mode?: "preview" | "commit";
     month?: number;
     year?: number;
     publisher_id?: string;
     publisher_public_id?: string;
-    rows?: Row[];
+    rows?: RevenueUploadInputRow[];
   };
 
   if (
@@ -43,6 +48,10 @@ export async function POST(request: Request) {
       { error: "Invalid month, year, or rows" },
       { status: 400 }
     );
+  }
+
+  if (mode !== "preview" && mode !== "commit") {
+    return NextResponse.json({ error: "Invalid mode" }, { status: 400 });
   }
 
   let resolvedPublisherId: string | null = null;
@@ -59,54 +68,40 @@ export async function POST(request: Request) {
 
   if (!resolvedPublisherId) {
     return NextResponse.json(
-      { error: "publisher_id or publisher_public_id is required and must resolve to a publisher" },
+      {
+        error:
+          "publisher_id or publisher_public_id is required and must resolve to a publisher",
+      },
       { status: 400 }
     );
   }
 
-  const errors: string[] = [];
-  const cleanedRows: {
-    stat_date: string;
-    impressions: number;
-    clicks: number;
-    revenue: number;
-  }[] = [];
+  const { data: pubMeta } = await supabase
+    .from("publishers")
+    .select("id, public_id")
+    .eq("id", resolvedPublisherId)
+    .maybeSingle();
 
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0);
+  const validation = validatePublisherUploadRows(
+    month,
+    year,
+    rows,
+    pubMeta?.public_id ?? null,
+    pubMeta?.id ?? resolvedPublisherId
+  );
 
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
-    const idx = i + 1;
-    if (!r || typeof r.date !== "string" || !r.date) {
-      errors.push(`Row ${idx}: missing date`);
-      continue;
-    }
-    const d = new Date(r.date);
-    if (Number.isNaN(d.getTime())) {
-      errors.push(`Row ${idx}: invalid date '${r.date}'`);
-      continue;
-    }
-    if (d < startDate || d > endDate) {
-      errors.push(`Row ${idx}: date ${r.date} not in selected month`);
-      continue;
-    }
-    const impressions = Number(r.impressions);
-    const clicks = Number(r.clicks);
-    const revenue = Number(r.revenue);
-    if (impressions < 0 || clicks < 0 || revenue < 0) {
-      errors.push(`Row ${idx}: negative impressions, clicks, or revenue`);
-      continue;
-    }
-    cleanedRows.push({
-      stat_date: d.toISOString().slice(0, 10),
-      impressions: impressions || 0,
-      clicks: clicks || 0,
-      revenue: revenue || 0,
+  if (mode === "preview") {
+    return NextResponse.json({
+      ok: validation.ok,
+      errors: validation.errors,
+      warnings: validation.warnings,
+      stats: validation.stats,
+      cleanedRowsCount: validation.cleanedRows.length,
     });
   }
 
-  if (errors.length > 0 || cleanedRows.length === 0) {
+  // commit
+  if (!validation.ok || validation.cleanedRows.length === 0) {
     await supabase.from("import_logs").insert({
       uploaded_by: user.id,
       file_name: "publisher_upload",
@@ -120,28 +115,27 @@ export async function POST(request: Request) {
           status: "failed",
         },
       ],
-      errors,
+      errors: validation.errors,
     });
     return NextResponse.json(
       {
         status: "declined",
         total: rows.length,
         imported: 0,
-        errors,
+        errors: validation.errors,
+        warnings: validation.warnings,
       },
       { status: 400 }
     );
   }
 
+  const cleanedRows = validation.cleanedRows;
+  const endDate = new Date(year, month, 0);
   const startStr = `${year}-${String(month).padStart(2, "0")}-01`;
-  const endStr = `${year}-${String(month).padStart(
-    2,
-    "0"
-  )}-${String(endDate.getDate()).padStart(2, "0")}`;
+  const endStr = `${year}-${String(month).padStart(2, "0")}-${String(
+    endDate.getDate()
+  ).padStart(2, "0")}`;
 
-  // For this publisher and month we first remove any existing rows, then insert
-  // only the dates present in cleanedRows. We never generate placeholder rows
-  // for missing dates; reports will show only the dates that were uploaded.
   await supabase
     .from("daily_stats")
     .delete()
@@ -160,7 +154,7 @@ export async function POST(request: Request) {
 
   const { error: insertError } = await supabase.from("daily_stats").insert(toInsert);
   if (insertError) {
-    errors.push(insertError.message);
+    const errMsg = insertError.message;
     await supabase.from("import_logs").insert({
       uploaded_by: user.id,
       file_name: "publisher_upload",
@@ -174,14 +168,14 @@ export async function POST(request: Request) {
           status: "failed",
         },
       ],
-      errors,
+      errors: [errMsg],
     });
     return NextResponse.json(
       {
         status: "declined",
         total: rows.length,
         imported: 0,
-        errors,
+        errors: [errMsg],
       },
       { status: 500 }
     );
@@ -230,6 +224,6 @@ export async function POST(request: Request) {
     total: rows.length,
     imported: cleanedRows.length,
     errors: [],
+    warnings: validation.warnings,
   });
 }
-

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { UploadReportModal } from "./upload-report-modal";
 import {
   getFirstActiveStatDayInMonth,
   resolvePublisherStatRange,
@@ -42,7 +43,7 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
 
-export function RevenuePageClient({
+function RevenuePageClientInner({
   initialMonth,
   initialYear,
 }: {
@@ -50,6 +51,7 @@ export function RevenuePageClient({
   initialYear: number;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [month, setMonth] = useState(initialMonth);
   const [year, setYear] = useState(initialYear);
   const [targets, setTargets] = useState<TargetRow[]>([]);
@@ -63,6 +65,8 @@ export function RevenuePageClient({
     | { mode: "all"; startDay: number; endDay: number }
     | { mode: "single"; row: TargetRow; startDay: number; endDay: number }
   >(null);
+  const [uploadModal, setUploadModal] = useState<TargetRow | null>(null);
+  const openedUploadFromUrlRef = useRef(false);
 
   const loadTargets = useCallback(async () => {
     setLoadingTargets(true);
@@ -84,6 +88,30 @@ export function RevenuePageClient({
   useEffect(() => {
     loadTargets();
   }, [loadTargets]);
+
+  const uploadFromUrl = searchParams.get("upload");
+  useEffect(() => {
+    if (
+      openedUploadFromUrlRef.current ||
+      !uploadFromUrl ||
+      loadingTargets ||
+      targets.length === 0
+    ) {
+      return;
+    }
+    const row = targets.find((t) => t.publisher_id === uploadFromUrl);
+    if (row) {
+      openedUploadFromUrlRef.current = true;
+      setUploadModal(row);
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete("upload");
+      const q = next.toString();
+      router.replace(
+        q ? `/admin/revenue?${q}` : "/admin/revenue",
+        { scroll: false }
+      );
+    }
+  }, [uploadFromUrl, loadingTargets, targets, searchParams, router]);
 
   async function saveTarget(publisherId: string, value: string) {
     const num = parseFloat(value);
@@ -227,7 +255,7 @@ export function RevenuePageClient({
           >
             {MONTHS.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {monthName(m)}
               </option>
             ))}
           </select>
@@ -335,11 +363,7 @@ export function RevenuePageClient({
                       <button
                         type="button"
                         className="text-blue-600 hover:underline text-xs"
-                        onClick={() =>
-                          router.push(
-                            `/admin/revenue/upload?publisher_id=${t.publisher_id}&month=${month}&year=${year}`
-                          )
-                        }
+                        onClick={() => setUploadModal(t)}
                       >
                         Upload report
                       </button>
@@ -392,6 +416,22 @@ export function RevenuePageClient({
           </div>
         )}
       </section>
+
+      {uploadModal && (
+        <UploadReportModal
+          open={!!uploadModal}
+          onClose={() => setUploadModal(null)}
+          onSuccess={() => {
+            void loadTargets();
+            router.refresh();
+          }}
+          publisherId={uploadModal.publisher_id}
+          publisherName={uploadModal.name}
+          publicId={uploadModal.public_id ?? null}
+          month={month}
+          year={year}
+        />
+      )}
 
       {estimateModal && (
         <div
@@ -583,5 +623,16 @@ export function RevenuePageClient({
         </div>
       )}
     </div>
+  );
+}
+
+export function RevenuePageClient(props: {
+  initialMonth: number;
+  initialYear: number;
+}) {
+  return (
+    <Suspense fallback={<p className="text-gray-600 p-4">Loading…</p>}>
+      <RevenuePageClientInner {...props} />
+    </Suspense>
   );
 }

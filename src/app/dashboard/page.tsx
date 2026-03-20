@@ -229,46 +229,38 @@ export default async function DashboardOverviewPage() {
   const ctrGrowth =
     prevMonthCtr > 0 ? ((monthlyCtr - prevMonthCtr) / prevMonthCtr) * 100 : 0;
 
-  chartData = chartData.map(
-    (d: {
-      stat_date: string;
-      revenue?: number;
-      impressions?: number;
-      ecpm?: number;
-      time_segments?: unknown;
-    }) => {
-      if (d.stat_date === realToday && d.time_segments) {
-        const effective = getEffectiveStatsAtTime(
-          {
-            stat_date: d.stat_date,
-            revenue: Number(d.revenue) ?? 0,
-            impressions: Number(d.impressions) ?? 0,
-            clicks: 0,
-            time_segments: d.time_segments as {
-              start: string;
-              end: string;
-              revenue: number;
-              impressions: number;
-              clicks: number;
-            }[],
-          },
-          now,
-          realToday
-        );
-        const ecpm =
-          effective.impressions > 0
-            ? (effective.revenue / effective.impressions) * 1000
-            : 0;
-        return {
-          ...d,
-          revenue: effective.revenue,
-          impressions: effective.impressions,
-          ecpm,
-        };
-      }
-      return d;
+  chartData = chartData.map((d) => {
+    if (d.stat_date === realToday && d.time_segments) {
+      const effective = getEffectiveStatsAtTime(
+        {
+          stat_date: d.stat_date,
+          revenue: Number(d.revenue) ?? 0,
+          impressions: Number(d.impressions) ?? 0,
+          clicks: 0,
+          time_segments: d.time_segments as {
+            start: string;
+            end: string;
+            revenue: number;
+            impressions: number;
+            clicks: number;
+          }[],
+        },
+        now,
+        realToday
+      );
+      const ecpm =
+        effective.impressions > 0
+          ? (effective.revenue / effective.impressions) * 1000
+          : 0;
+      return {
+        ...d,
+        revenue: effective.revenue,
+        impressions: effective.impressions,
+        ecpm,
+      };
     }
-  );
+    return d;
+  }) as typeof chartData;
 
   const hasRealDataThisMonth = (monthStats ?? []).some((r) => r.is_estimated === false);
   const showEstimatedBadge = (monthStats ?? []).length > 0 && !hasRealDataThisMonth;

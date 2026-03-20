@@ -1,5 +1,6 @@
 "use client";
 
+import { createClient } from "@/lib/supabase/client";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
@@ -13,8 +14,13 @@ function isProtectedPath(pathname: string) {
   );
 }
 
-function refreshSession() {
-  fetch("/api/auth/refresh", { method: "POST" }).catch(() => {});
+async function refreshSession() {
+  const res = await fetch("/api/auth/refresh", { method: "POST" });
+  if (res.status === 401) {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.assign("/login?reason=session");
+  }
 }
 
 export function AuthRefresh() {
@@ -24,9 +30,9 @@ export function AuthRefresh() {
   useEffect(() => {
     if (!pathname || !isProtectedPath(pathname)) return;
 
-    refreshSession();
+    void refreshSession();
 
-    intervalRef.current = setInterval(refreshSession, REFRESH_INTERVAL_MS);
+    intervalRef.current = setInterval(() => void refreshSession(), REFRESH_INTERVAL_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

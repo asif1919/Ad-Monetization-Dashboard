@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast-provider";
@@ -12,7 +12,14 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [sessionExpired, setSessionExpired] = useState(false);
   const supabase = createClient();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reason = new URLSearchParams(window.location.search).get("reason");
+    setSessionExpired(reason === "session");
+  }, []);
   const { show } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -44,6 +51,11 @@ export default function LoginPage() {
         <h1 className="text-xl font-semibold text-center mb-6">
           Ad Monetization Dashboard
         </h1>
+        {sessionExpired && (
+          <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+            Your session expired or was invalid. Please sign in again.
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label

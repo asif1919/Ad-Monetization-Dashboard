@@ -23,10 +23,13 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // getClaims() validates JWT locally when using asymmetric signing keys (no Auth server call)
-  const { data: claims, error: claimsError } = await supabase.auth.getClaims();
+  // Refresh session from cookies; invalid/missing refresh token clears session on signOut elsewhere
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
-  const hasValidSession = !claimsError && claims?.claims?.sub;
+  const hasValidSession = !userError && !!user;
 
   const pathname = request.nextUrl.pathname;
 

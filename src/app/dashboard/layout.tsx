@@ -25,10 +25,10 @@ export default async function DashboardLayout({
   if (profileError) {
     const { data: fallback } = await supabase
       .from("profiles")
-      .select("role, publisher_id")
+      .select("role, publisher_id, preferred_currency")
       .eq("id", user.id)
       .single();
-    profile = fallback ?? undefined;
+    profile = fallback ?? null;
   }
 
   if (profile?.role === "super_admin") redirect("/admin");

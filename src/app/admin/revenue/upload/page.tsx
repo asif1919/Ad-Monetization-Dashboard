@@ -1,7 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
-import { notFound, redirect } from "next/navigation";
-import { UploadPageClient } from "./upload-page-client";
+import { redirect } from "next/navigation";
 
+/**
+ * Legacy URL: upload now opens from the Revenue table modal.
+ * Preserve bookmarks with a redirect to the same month/year + open upload for that publisher.
+ */
 export default async function RevenueUploadPage({
   searchParams,
 }: {
@@ -16,23 +18,8 @@ export default async function RevenueUploadPage({
     redirect("/admin/revenue");
   }
 
-  const supabase = await createClient();
-  const { data: publisher } = await supabase
-    .from("publishers")
-    .select("id, name, public_id")
-    .eq("id", publisherId)
-    .maybeSingle();
-
-  if (!publisher) notFound();
-
-  return (
-    <UploadPageClient
-      publisherId={publisher.id}
-      publisherName={publisher.name}
-      publicId={publisher.public_id ?? null}
-      month={month}
-      year={year}
-    />
+  redirect(
+    `/admin/revenue?month=${month}&year=${year}&upload=${encodeURIComponent(publisherId)}`
   );
 }
 

@@ -8,6 +8,19 @@ import { NextResponse } from "next/server";
  */
 export async function POST() {
   const supabase = await createClient();
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    // Stale or missing refresh token — clear cookies so client stops retrying
+    await supabase.auth.signOut();
+    return NextResponse.json(
+      { ok: false, error: error?.message ?? "no_session" },
+      { status: 401 }
+    );
+  }
+
   return NextResponse.json({ ok: true });
 }

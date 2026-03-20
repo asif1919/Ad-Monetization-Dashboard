@@ -2,6 +2,7 @@
 
 import { useCurrency } from "@/components/currency/currency-provider";
 import { getEffectiveStatsAtTimeLocal } from "@/lib/time-segments";
+import type { TimeSegment } from "@/lib/supabase/types";
 import { useState, useEffect } from "react";
 
 function formatPct(n: number) {
@@ -34,7 +35,7 @@ type RawTodayStats = {
   revenue: number;
   impressions: number;
   clicks: number;
-  time_segments?: unknown;
+  time_segments?: TimeSegment[] | string | null;
 } | null;
 
 export function OverviewCards({
