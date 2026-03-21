@@ -3,6 +3,8 @@
  * Matches behavior of the original upload route (all-or-nothing on any row error).
  */
 
+import { logUploadReport } from "@/lib/upload-report-debug";
+
 export type RevenueUploadInputRow = {
   /** ISO date string YYYY-MM-DD (after client/server parsing) */
   date: string | null;
@@ -13,6 +15,9 @@ export type RevenueUploadInputRow = {
   report_id?: string | null;
   /** Legacy: old templates used this column name; value may be Report ID or internal UUID. */
   publisher_id?: string | null;
+  /** From file when present */
+  ad_format?: string | null;
+  device?: string | null;
 };
 
 export type CleanedDailyRow = {
@@ -20,6 +25,10 @@ export type CleanedDailyRow = {
   impressions: number;
   clicks: number;
   revenue: number;
+  /** Merged from file rows for that day (comma-separated if multiple distinct values) */
+  ad_format?: string | null;
+  device?: string | null;
+  report_id?: string | null;
 };
 
 export type RevenueUploadStats = {
@@ -48,6 +57,9 @@ export type DailyPreviewRow = {
   impressions: number;
   clicks: number;
   revenue: number;
+  ad_format?: string | null;
+  device?: string | null;
+  report_id?: string | null;
   ecpm: number | null;
   ctr_pct: number | null;
   ecpc: number | null;
@@ -83,6 +95,20 @@ export function computeDerivedTotals(rows: CleanedDailyRow[]): RevenueUploadDeri
   };
 }
 
+function mergeDistinctLabels(a: string | null | undefined, b: string | null | undefined): string | null {
+  const set = new Set<string>();
+  for (const part of [a, b]) {
+    if (part == null) continue;
+    const t = String(part).trim();
+    if (!t) continue;
+    for (const x of t.split(",").map((s) => s.trim()).filter(Boolean)) {
+      set.add(x);
+    }
+  }
+  if (set.size === 0) return null;
+  return Array.from(set).join(", ");
+}
+
 function enrichDailyRow(r: CleanedDailyRow): DailyPreviewRow {
   const imp = r.impressions;
   const clk = r.clicks;
@@ -92,6 +118,9 @@ function enrichDailyRow(r: CleanedDailyRow): DailyPreviewRow {
     impressions: imp,
     clicks: clk,
     revenue: rev,
+    ad_format: r.ad_format ?? null,
+    device: r.device ?? null,
+    report_id: r.report_id ?? null,
     ecpm: imp > 0 ? (rev / imp) * 1000 : null,
     ctr_pct: imp > 0 ? (clk / imp) * 100 : null,
     ecpc: clk > 0 ? rev / clk : null,
@@ -177,17 +206,30 @@ export function validatePublisherUploadRows(
       );
       continue;
     }
+    const ridDisplay = getReportIdFromRow(r);
     lineRows.push({
       stat_date: r.date,
       impressions: impressions || 0,
       clicks: clicks || 0,
       revenue: revenue || 0,
+      ad_format: r.ad_format?.trim() || null,
+      device: r.device?.trim() || null,
+      report_id: ridDisplay || null,
     });
   }
 
   const validLineCount = lineRows.length;
 
   if (errors.length > 0 || lineRows.length === 0) {
+    logUploadReport("validate", {
+      ok: false,
+      month,
+      year,
+      inputRows: rows.length,
+      validLinesBeforeAgg: validLineCount,
+      errorCount: errors.length,
+      errorsSample: errors.slice(0, 15),
+    });
     return {
       ok: false,
       errors,
@@ -228,6 +270,9 @@ export function validatePublisherUploadRows(
         impressions: prev.impressions + row.impressions,
         clicks: prev.clicks + row.clicks,
         revenue: prev.revenue + row.revenue,
+        ad_format: mergeDistinctLabels(prev.ad_format, row.ad_format),
+        device: mergeDistinctLabels(prev.device, row.device),
+        report_id: mergeDistinctLabels(prev.report_id, row.report_id),
       });
     }
   }
@@ -241,6 +286,21 @@ export function validatePublisherUploadRows(
 
   const derived = computeDerivedTotals(deduped);
   const daily_preview = deduped.map(enrichDailyRow);
+
+  logUploadReport("validate", {
+    ok: true,
+    month,
+    year,
+    inputRows: rows.length,
+    validLines: validLineCount,
+    uniqueDays: deduped.length,
+    dailyPreviewRows: daily_preview.length,
+    hasDerived: !!derived,
+    minDate: min_stat_date,
+    maxDate: max_stat_date,
+    warningCount: warnings.length,
+    firstDailySample: daily_preview[0] ?? null,
+  });
 
   return {
     ok: true,

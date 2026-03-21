@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import type { RevenueUploadInputRow } from "@/lib/revenue-upload";
+import { logUploadReport } from "@/lib/upload-report-debug";
 
 export type ColumnMapping = {
   publisher_id?: number;
@@ -36,7 +37,11 @@ export function parseExcelFile(buffer: ArrayBuffer): unknown[][] {
 export function getHeaders(data: unknown[][]): string[] {
   const first = data[0];
   if (!first || !Array.isArray(first)) return [];
-  return first.map((c) => String(c ?? "").trim());
+  return first.map((c) =>
+    String(c ?? "")
+      .replace(/^\uFEFF/, "")
+      .trim()
+  );
 }
 
 export function applyMapping(
@@ -82,9 +87,15 @@ export function parseDate(s: string | undefined): string | null {
   return d.toISOString().slice(0, 10);
 }
 
-/** Normalize header for matching: trim, lower, collapse spaces. */
+/** Normalize header for matching: trim, lower, collapse spaces, NBSP → space. */
 function normalizeHeaderKey(h: string): string {
-  return h.trim().toLowerCase().replace(/\s+/g, " ");
+  return h
+    .replace(/\uFEFF/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[\u200B-\u200D]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
 /**
@@ -139,6 +150,42 @@ function findColumnIndex(headers: string[], ...candidates: string[]): number | u
   return undefined;
 }
 
+/**
+ * When exact header match fails (NBSP, merged labels, etc.), find a column whose
+ * normalized header contains all given words (e.g. "ad" + "format").
+ */
+function findColumnIndexByWords(headers: string[], ...words: string[]): number | undefined {
+  const nhs = headers.map(normalizeHeaderKey);
+  const ws = words.map((w) => normalizeHeaderKey(w)).filter(Boolean);
+  if (ws.length === 0) return undefined;
+  for (let i = 0; i < nhs.length; i++) {
+    const h = nhs[i];
+    if (ws.every((w) => h.includes(w))) return i;
+  }
+  return undefined;
+}
+
+/**
+ * Standard 8-column export: URL(0), Date(1), Ad Format(2), Device(3), Impressions(4)…
+ * Use fixed positions when name lookup missed but layout matches.
+ */
+function fallbackAdFormatDeviceColumnIndices(
+  headers: string[],
+  dateIdx: number | undefined,
+  impIdx: number | undefined,
+  adFormatIdx: number | undefined,
+  deviceIdx: number | undefined
+): { adFormatIdx?: number; deviceIdx?: number } {
+  if (headers.length < 8) return {};
+  if (dateIdx === 1 && impIdx === 4) {
+    return {
+      adFormatIdx: adFormatIdx ?? 2,
+      deviceIdx: deviceIdx ?? 3,
+    };
+  }
+  return {};
+}
+
 function rowIsEffectivelyEmpty(row: unknown[]): boolean {
   return row.every((c) => {
     if (c == null) return true;
@@ -162,6 +209,14 @@ export const PUBLISHER_REPORT_HEADER_NAMES = [
   "Report ID",
 ] as const;
 
+function cellStr(row: unknown[], idx: number | undefined): string | null {
+  if (idx == null || idx < 0 || idx >= row.length) return null;
+  const v = row[idx];
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s || null;
+}
+
 function pushRowFromIndices(
   rows: RevenueUploadInputRow[],
   row: unknown[],
@@ -169,7 +224,9 @@ function pushRowFromIndices(
   impIdx: number,
   clickIdx: number,
   revIdx: number,
-  pubIdx: number | undefined
+  pubIdx: number | undefined,
+  adFormatIdx?: number,
+  deviceIdx?: number
 ) {
   const rawDate = row[dateIdx] != null ? String(row[dateIdx]).trim() : "";
   const iso = parseReportDateFlexible(rawDate);
@@ -183,6 +240,8 @@ function pushRowFromIndices(
     clicks: parseNumericCell(row[clickIdx] != null ? String(row[clickIdx]) : undefined),
     revenue: parseNumericCell(row[revIdx] != null ? String(row[revIdx]) : undefined),
     report_id: reportId,
+    ad_format: cellStr(row, adFormatIdx),
+    device: cellStr(row, deviceIdx),
   });
 }
 
@@ -196,10 +255,21 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
   error: string | null;
 } {
   if (!data || data.length < 2) {
+    logUploadReport("parse", {
+      branch: "empty",
+      dataLength: data?.length ?? 0,
+      error: "too_few_rows",
+    });
     return { rows: [], error: "File appears to be empty or has no data rows." };
   }
 
   const headers = getHeaders(data);
+  logUploadReport("parse", {
+    step: "headers",
+    sheetRows: data.length,
+    headerCount: headers.length,
+    headersSample: headers.slice(0, 12),
+  });
   const dateIdx = findColumnIndex(headers, "Date", "date");
   const impIdx = findColumnIndex(headers, "Impressions", "impressions");
   const clickIdx = findColumnIndex(headers, "Click", "Clicks", "click", "clicks");
@@ -219,6 +289,28 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
     "Publisher ID",
     "publisher id"
   );
+  let adFormatIdx = findColumnIndex(
+    headers,
+    "Ad Format",
+    "ad format",
+    "Ad format"
+  );
+  let deviceIdx = findColumnIndex(headers, "Device", "device");
+  if (adFormatIdx === undefined) {
+    adFormatIdx = findColumnIndexByWords(headers, "ad", "format");
+  }
+  if (deviceIdx === undefined) {
+    deviceIdx = findColumnIndexByWords(headers, "device");
+  }
+  const fbAdDev = fallbackAdFormatDeviceColumnIndices(
+    headers,
+    dateIdx,
+    impIdx,
+    adFormatIdx,
+    deviceIdx
+  );
+  adFormatIdx = adFormatIdx ?? fbAdDev.adFormatIdx;
+  deviceIdx = deviceIdx ?? fbAdDev.deviceIdx;
 
   const looksLikeNewFormat =
     dateIdx !== undefined &&
@@ -232,8 +324,30 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
       const row = data[i];
       if (!Array.isArray(row)) continue;
       if (rowIsEffectivelyEmpty(row)) continue;
-      pushRowFromIndices(rows, row, dateIdx, impIdx, clickIdx, revIdx, pubIdx);
+      pushRowFromIndices(
+        rows,
+        row,
+        dateIdx,
+        impIdx,
+        clickIdx,
+        revIdx,
+        pubIdx,
+        adFormatIdx,
+        deviceIdx
+      );
     }
+    logUploadReport("parse", {
+      branch: "named-columns",
+      dateIdx,
+      impIdx,
+      clickIdx,
+      revIdx,
+      pubIdx,
+      adFormatIdx,
+      deviceIdx,
+      parsedRowCount: rows.length,
+      firstRowSample: rows[0] ?? null,
+    });
     return { rows, error: null };
   }
 
@@ -246,6 +360,8 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
   if (looksLikeStandardLayout && headers.length >= 10) {
     const rows: RevenueUploadInputRow[] = [];
     const DI = 1;
+    const AF = 2;
+    const DV = 3;
     const II = 4;
     const CI = 5;
     const RI = 8;
@@ -254,8 +370,13 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
       const row = data[i];
       if (!Array.isArray(row)) continue;
       if (rowIsEffectivelyEmpty(row)) continue;
-      pushRowFromIndices(rows, row, DI, II, CI, RI, PI);
+      pushRowFromIndices(rows, row, DI, II, CI, RI, PI, AF, DV);
     }
+    logUploadReport("parse", {
+      branch: "fixed-10-col-legacy",
+      parsedRowCount: rows.length,
+      firstRowSample: rows[0] ?? null,
+    });
     return { rows, error: null };
   }
 
@@ -263,6 +384,8 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
   if (looksLikeStandardLayout && headers.length >= 8) {
     const rows: RevenueUploadInputRow[] = [];
     const DI = 1;
+    const AF = 2;
+    const DV = 3;
     const II = 4;
     const CI = 5;
     const RI = 6;
@@ -271,8 +394,13 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
       const row = data[i];
       if (!Array.isArray(row)) continue;
       if (rowIsEffectivelyEmpty(row)) continue;
-      pushRowFromIndices(rows, row, DI, II, CI, RI, PI);
+      pushRowFromIndices(rows, row, DI, II, CI, RI, PI, AF, DV);
     }
+    logUploadReport("parse", {
+      branch: "fixed-8-col",
+      parsedRowCount: rows.length,
+      firstRowSample: rows[0] ?? null,
+    });
     return { rows, error: null };
   }
 
@@ -292,6 +420,11 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
   }
 
   if (rows.length === 0) {
+    logUploadReport("parse", {
+      branch: "legacy-4col",
+      error: "no_data_rows_after_legacy",
+      parsedRowCount: 0,
+    });
     return {
       rows: [],
       error:
@@ -299,5 +432,10 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
     };
   }
 
+  logUploadReport("parse", {
+    branch: "legacy-4col",
+    parsedRowCount: rows.length,
+    firstRowSample: rows[0] ?? null,
+  });
   return { rows, error: null };
 }

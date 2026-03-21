@@ -3,6 +3,8 @@ import {
   validatePublisherUploadRows,
   type RevenueUploadInputRow,
 } from "@/lib/revenue-upload";
+import { logUploadReport } from "@/lib/upload-report-debug";
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
@@ -89,6 +91,20 @@ export async function POST(request: Request) {
     pubMeta?.public_id ?? null,
     pubMeta?.id ?? resolvedPublisherId
   );
+
+  logUploadReport("api", {
+    mode,
+    month,
+    year,
+    publisherId: resolvedPublisherId,
+    rowCountInBody: rows.length,
+    ok: validation.ok,
+    cleanedRows: validation.cleanedRows.length,
+    dailyPreviewOut: validation.daily_preview.length,
+    hasDerived: !!validation.derived,
+    errorCount: validation.errors.length,
+    warningCount: validation.warnings.length,
+  });
 
   if (mode === "preview") {
     return NextResponse.json({
@@ -182,6 +198,20 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+
+  // Ensure rows are marked real (some clients/defaults can leave is_estimated = true).
+  const { error: patchError } = await supabase
+    .from("daily_stats")
+    .update({ is_estimated: false })
+    .eq("publisher_id", resolvedPublisherId)
+    .gte("stat_date", startStr)
+    .lte("stat_date", endStr);
+  if (patchError) {
+    console.error("[revenue/upload] is_estimated patch failed", patchError);
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/reports");
 
   const ts = new Date().toISOString();
   const { data: existing } = await supabase

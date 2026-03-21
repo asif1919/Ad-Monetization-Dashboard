@@ -89,13 +89,45 @@ export type RowWithSegments = {
   revenue: number;
   impressions: number;
   clicks: number;
-  time_segments?: TimeSegment[] | string | null;
+  time_segments?: TimeSegment[] | string | Record<string, unknown> | null;
 };
 
+function isTimeSegmentLike(x: unknown): x is TimeSegment {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "start" in x &&
+    "end" in x &&
+    typeof (x as TimeSegment).start === "string" &&
+    typeof (x as TimeSegment).end === "string"
+  );
+}
+
+/** If JSONB was stored or deserialized as an object (numeric keys / wrapper), coerce to array. */
+function coerceObjectToSegments(raw: Record<string, unknown>): TimeSegment[] | null {
+  if (Array.isArray(raw.segments)) {
+    return parseSegments(raw.segments as TimeSegment[] | string | null);
+  }
+  const numericKeys = Object.keys(raw).filter((k) => /^\d+$/.test(k));
+  if (numericKeys.length > 0) {
+    const sorted = numericKeys.sort((a, b) => Number(a) - Number(b));
+    const vals = sorted.map((k) => raw[k]);
+    if (vals.every(isTimeSegmentLike)) return vals as TimeSegment[];
+  }
+  const vals = Object.values(raw);
+  if (vals.length > 0 && vals.every(isTimeSegmentLike)) return vals as TimeSegment[];
+  return null;
+}
+
 /** Normalize time_segments from DB (may be JSON string or double-stringified) to TimeSegment[]. */
-function parseSegments(raw: TimeSegment[] | string | null | undefined): TimeSegment[] | null {
+function parseSegments(
+  raw: TimeSegment[] | string | Record<string, unknown> | null | undefined
+): TimeSegment[] | null {
   if (raw == null) return null;
   if (Array.isArray(raw)) return raw;
+  if (typeof raw === "object" && raw !== null) {
+    return coerceObjectToSegments(raw as Record<string, unknown>);
+  }
   if (typeof raw !== "string") return null;
   try {
     let parsed = JSON.parse(raw) as unknown;
@@ -103,7 +135,11 @@ function parseSegments(raw: TimeSegment[] | string | null | undefined): TimeSegm
     if (typeof parsed === "string") {
       parsed = JSON.parse(parsed) as unknown;
     }
-    return Array.isArray(parsed) ? (parsed as TimeSegment[]) : null;
+    if (Array.isArray(parsed)) return parsed as TimeSegment[];
+    if (typeof parsed === "object" && parsed !== null) {
+      return coerceObjectToSegments(parsed as Record<string, unknown>);
+    }
+    return null;
   } catch {
     return null;
   }
@@ -124,24 +160,27 @@ export function getEffectiveStatsAtTime(
   const todayUtc = todayOverride ?? now.toISOString().slice(0, 10);
   const isToday = row.stat_date === todayUtc;
 
-  const segments = parseSegments(row.time_segments);
+  let segments = parseSegments(row.time_segments);
+  // Real/imported rows often have no time_segments; estimated rows usually do. Synthesize
+  // from row totals so "today" stays progressive instead of 0 or noisy errors.
   if (!segments || segments.length === 0) {
-    if (LOG_PROGRESSIVE) {
-      console.log(
-        isToday
-          ? "[getEffectiveStatsAtTime] error: missing/invalid segments for today"
-          : "[getEffectiveStatsAtTime] full-day (no segments, not today)",
-        {
-          stat_date: row.stat_date,
-          todayOverride,
-          rawType: typeof row.time_segments,
-          rawIsArray: Array.isArray(row.time_segments),
-        }
+    if (isToday) {
+      segments = buildTimeSegments(
+        Number(row.revenue) || 0,
+        Number(row.impressions) || 0,
+        Number(row.clicks) || 0,
+        row.stat_date
       );
     }
-    // Never fall back to full-day totals for "today" if segments are missing/invalid.
-    if (isToday) {
-      return { revenue: 0, impressions: 0, clicks: 0, hadError: true };
+  }
+  if (!segments || segments.length === 0) {
+    if (LOG_PROGRESSIVE) {
+      console.log("[getEffectiveStatsAtTime] full-day (no segments, not today)", {
+        stat_date: row.stat_date,
+        todayOverride,
+        rawType: typeof row.time_segments,
+        rawIsArray: Array.isArray(row.time_segments),
+      });
     }
     return {
       revenue: Number(row.revenue) || 0,
@@ -249,12 +288,30 @@ export function getEffectiveStatsAtTimeLocal(
   now: Date,
   selectedDate: string
 ): { revenue: number; impressions: number; clicks: number; hadError?: boolean } {
-  const segments = parseSegments(row.time_segments);
   const localDateStr = localDateString(now);
   const isSelectedDay = row.stat_date === selectedDate;
 
+  let segments = parseSegments(row.time_segments);
+  if (!segments || segments.length === 0) {
+    if (isSelectedDay && localDateStr === selectedDate) {
+      segments = buildTimeSegments(
+        Number(row.revenue) || 0,
+        Number(row.impressions) || 0,
+        Number(row.clicks) || 0,
+        row.stat_date
+      );
+    }
+  }
+
   if (!segments || segments.length === 0) {
     if (isSelectedDay) {
+      if (localDateStr > selectedDate) {
+        return {
+          revenue: Number(row.revenue) || 0,
+          impressions: Number(row.impressions) || 0,
+          clicks: Number(row.clicks) || 0,
+        };
+      }
       return { revenue: 0, impressions: 0, clicks: 0, hadError: true };
     }
     return {

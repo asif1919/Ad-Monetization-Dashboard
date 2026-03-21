@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { OverviewCards } from "./overview-cards";
 import { RevenueChart } from "./revenue-chart";
+import { isRealDailyStatRow } from "@/lib/daily-stats-flags";
 import { getEffectiveStatsAtTime } from "@/lib/time-segments";
 import { CurrentDateLabel } from "./current-date-label";
 import { MonthlyDataTable } from "./monthly-table";
@@ -262,7 +263,7 @@ export default async function DashboardOverviewPage() {
     return d;
   }) as typeof chartData;
 
-  const hasRealDataThisMonth = (monthStats ?? []).some((r) => r.is_estimated === false);
+  const hasRealDataThisMonth = (monthStats ?? []).some(isRealDailyStatRow);
   const showEstimatedBadge = (monthStats ?? []).length > 0 && !hasRealDataThisMonth;
 
   return (

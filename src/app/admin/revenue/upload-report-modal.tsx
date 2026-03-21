@@ -11,6 +11,10 @@ import type {
   RevenueUploadDerivedStats,
   DailyPreviewRow,
 } from "@/lib/revenue-upload";
+import {
+  logUploadReport,
+  logUploadReportError,
+} from "@/lib/upload-report-debug";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -150,8 +154,32 @@ export function UploadReportModal({
             rows,
           }),
         });
-        const data = (await res.json()) as PreviewResponse & { error?: string };
+        let data: PreviewResponse & { error?: string };
+        try {
+          data = (await res.json()) as PreviewResponse & { error?: string };
+        } catch (parseErr) {
+          logUploadReportError("client-preview-json", parseErr);
+          setMessage("Invalid response from server (see console).");
+          setPhase("error");
+          return;
+        }
+        logUploadReport("client-preview", {
+          httpStatus: res.status,
+          ok: data.ok,
+          cleanedRowsCount: data.cleanedRowsCount,
+          dailyPreviewLength: Array.isArray(data.daily_preview)
+            ? data.daily_preview.length
+            : "missing",
+          hasDerived: !!data.derived,
+          stats: data.stats,
+          errorCount: data.errors?.length ?? 0,
+          serverError: data.error ?? null,
+        });
         if (!res.ok && data.error && !("ok" in data && data.ok !== undefined)) {
+          logUploadReportError("client-preview-http", {
+            status: res.status,
+            error: data.error,
+          });
           setMessage(data.error ?? "Preview failed");
           setPhase("error");
           return;
@@ -176,6 +204,7 @@ export function UploadReportModal({
           setMessage("Fix the file and try again, or choose another file.");
         }
       } catch (e) {
+        logUploadReportError("client-preview", e);
         setMessage(e instanceof Error ? e.message : "Preview failed");
         setPhase("error");
       }
@@ -202,7 +231,15 @@ export function UploadReportModal({
       try {
         const buf = await file.arrayBuffer();
         const { rows, error } = parseFileToRows(buf);
+        logUploadReport("client-parse", {
+          fileName: file.name,
+          byteLength: buf.byteLength,
+          parsedRowCount: rows.length,
+          parseError: error,
+          firstParsedRow: rows[0] ?? null,
+        });
         if (error) {
+          logUploadReportError("client-parse", error);
           setMessage(error);
           setPhase("error");
           return;
@@ -234,11 +271,20 @@ export function UploadReportModal({
         }),
       });
       const data = await res.json();
+      logUploadReport("client-commit", {
+        httpStatus: res.status,
+        status: data.status,
+        imported: data.imported,
+        dailyPreviewLength: Array.isArray(data.daily_preview)
+          ? data.daily_preview.length
+          : "missing",
+      });
       if (!res.ok || data.status !== "accepted") {
         const errText =
           (Array.isArray(data.errors) && data.errors.join("; ")) ||
           data.error ||
           "Upload failed";
+        logUploadReportError("client-commit", { errText, data });
         setMessage(errText);
         setPhase("ready");
         return;
@@ -280,7 +326,7 @@ export function UploadReportModal({
       aria-modal="true"
       aria-labelledby="upload-report-modal-title"
     >
-      <div className="w-full max-w-7xl max-h-[95vh] overflow-y-auto rounded-lg bg-white p-6 sm:p-8 shadow-xl border border-gray-200">
+      <div className="w-full max-w-7xl max-h-[95vh] overflow-auto rounded-lg bg-white p-6 sm:p-8 shadow-xl border border-gray-200">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <h2
@@ -562,55 +608,78 @@ export function UploadReportModal({
 
                 {preview.daily_preview.length > 0 && (
                   <div>
-                    <h4 className="font-medium text-gray-900 mb-2">By day (import preview)</h4>
-                    <div className="overflow-x-auto rounded-md border border-gray-200 max-h-56 overflow-y-auto">
-                      <table className="min-w-full text-xs text-left">
-                        <thead className="bg-gray-50 sticky top-0 z-10">
+                    <div className="mb-2">
+                      <h4 className="font-medium text-gray-900">By day (import preview)</h4>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Columns match your file (aggregated by day). If several rows share a date,
+                        numbers are summed; Ad Format, Device, and Report ID show combined distinct
+                        values. eCPM, CTR, and eCPC stay in{" "}
+                        <span className="font-medium text-gray-800">Calculated from your file</span>{" "}
+                        above.
+                      </p>
+                    </div>
+                    <div className="overflow-x-auto overflow-y-auto rounded-md border border-gray-200 max-h-80 shadow-inner">
+                      <table className="w-max min-w-full text-sm text-left border-collapse">
+                        <thead className="bg-gray-50 sticky top-0 z-10 shadow-sm">
                           <tr>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b">Date</th>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
-                              Impr.
+                            <th className="px-3 py-2.5 font-medium text-gray-800 border-b text-left whitespace-nowrap">
+                              Date
                             </th>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
-                              Clicks
+                            <th className="px-3 py-2.5 font-medium text-gray-700 border-b text-left whitespace-nowrap max-w-[10rem]">
+                              Ad Format
                             </th>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
-                              Revenue
+                            <th className="px-3 py-2.5 font-medium text-gray-700 border-b text-left whitespace-nowrap max-w-[8rem]">
+                              Device
                             </th>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
-                              eCPM
+                            <th className="px-3 py-2.5 font-medium text-gray-700 border-b text-right whitespace-nowrap">
+                              Impressions
                             </th>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
-                              CTR (%)
+                            <th className="px-3 py-2.5 font-medium text-gray-700 border-b text-right whitespace-nowrap">
+                              Click
                             </th>
-                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
-                              eCPC
+                            <th className="px-3 py-2.5 font-medium text-gray-700 border-b text-right whitespace-nowrap">
+                              Net revenue (USD)
+                            </th>
+                            <th className="px-3 py-2.5 font-medium text-gray-700 border-b text-left whitespace-nowrap max-w-[12rem]">
+                              Report ID
                             </th>
                           </tr>
                         </thead>
                         <tbody>
                           {preview.daily_preview.map((d) => (
-                            <tr key={d.stat_date} className="border-b border-gray-100">
-                              <td className="px-2 py-1.5 font-mono text-gray-800 whitespace-nowrap">
+                            <tr
+                              key={d.stat_date}
+                              className="border-b border-gray-100 hover:bg-gray-50/90"
+                            >
+                              <td className="px-3 py-2 font-mono text-gray-900 whitespace-nowrap">
                                 {d.stat_date}
                               </td>
-                              <td className="px-2 py-1.5 text-right text-gray-800">
+                              <td
+                                className="px-3 py-2 text-gray-800 max-w-[10rem] truncate"
+                                title={d.ad_format ?? undefined}
+                              >
+                                {d.ad_format ?? "—"}
+                              </td>
+                              <td
+                                className="px-3 py-2 text-gray-800 max-w-[8rem] truncate"
+                                title={d.device ?? undefined}
+                              >
+                                {d.device ?? "—"}
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-800 whitespace-nowrap tabular-nums">
                                 {d.impressions.toLocaleString()}
                               </td>
-                              <td className="px-2 py-1.5 text-right text-gray-800">
+                              <td className="px-3 py-2 text-right text-gray-800 whitespace-nowrap tabular-nums">
                                 {d.clicks.toLocaleString()}
                               </td>
-                              <td className="px-2 py-1.5 text-right text-gray-800">
+                              <td className="px-3 py-2 text-right text-gray-800 whitespace-nowrap tabular-nums">
                                 ${fmtUsd(d.revenue)}
                               </td>
-                              <td className="px-2 py-1.5 text-right text-gray-800">
-                                {d.ecpm == null ? "—" : `$${fmtMetric(d.ecpm, 2)}`}
-                              </td>
-                              <td className="px-2 py-1.5 text-right text-gray-800">
-                                {d.ctr_pct == null ? "—" : `${fmtMetric(d.ctr_pct, 2)}%`}
-                              </td>
-                              <td className="px-2 py-1.5 text-right text-gray-800">
-                                {d.ecpc == null ? "—" : `$${fmtMetric(d.ecpc, 4)}`}
+                              <td
+                                className="px-3 py-2 font-mono text-xs text-gray-800 max-w-[12rem] truncate"
+                                title={d.report_id ?? undefined}
+                              >
+                                {d.report_id ?? "—"}
                               </td>
                             </tr>
                           ))}

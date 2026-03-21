@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 type Row = {
@@ -129,6 +130,20 @@ export async function POST(request: Request) {
       .insert(toInsert);
     if (insertError) {
       errors.push(insertError.message);
+    } else {
+      for (const pid of publisherIds) {
+        const { error: patchErr } = await supabase
+          .from("daily_stats")
+          .update({ is_estimated: false })
+          .eq("publisher_id", pid)
+          .gte("stat_date", startDate)
+          .lte("stat_date", endDate);
+        if (patchErr) {
+          console.error("[admin/import] is_estimated patch failed", patchErr);
+        }
+      }
+      revalidatePath("/dashboard");
+      revalidatePath("/dashboard/reports");
     }
   }
 
