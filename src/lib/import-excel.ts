@@ -147,7 +147,10 @@ function rowIsEffectivelyEmpty(row: unknown[]): boolean {
   });
 }
 
-/** Preferred export report layout (header names). */
+/**
+ * Preferred export layout (header row). eCPM, CTR (%), and eCPC are not in the file — they are
+ * calculated after upload from impressions, clicks, and revenue.
+ */
 export const PUBLISHER_REPORT_HEADER_NAMES = [
   "URL",
   "Date",
@@ -155,8 +158,6 @@ export const PUBLISHER_REPORT_HEADER_NAMES = [
   "Device",
   "Impressions",
   "Click",
-  "eCPM",
-  "CTR Rate",
   "Net revenue (USD)",
   "Report ID",
 ] as const;
@@ -186,8 +187,9 @@ function pushRowFromIndices(
 }
 
 /**
- * Parse first sheet: row 1 = headers. Supports named columns, fixed 10-column order
- * (URL…Report ID), or legacy A–D (Date, Impressions, Clicks, Revenue).
+ * Parse first sheet: row 1 = headers. Supports named columns, fixed 8-column order
+ * (URL…Report ID, no eCPM/CTR in file), optional legacy 10-column files with extra columns,
+ * or legacy A–D (Date, Impressions, Clicks, Revenue).
  */
 export function parsePublisherRevenueReportRows(data: unknown[][]): {
   rows: RevenueUploadInputRow[];
@@ -235,19 +237,36 @@ export function parsePublisherRevenueReportRows(data: unknown[][]): {
     return { rows, error: null };
   }
 
-  /** Fixed order: URL, Date, Ad Format, Device, Impressions, Click, eCPM, CTR Rate, Net revenue (USD), Report ID */
   const col0 = normalizeHeaderKey(headers[0] ?? "");
   const col1 = normalizeHeaderKey(headers[1] ?? "");
-  const looksLikeStandardTenCol =
-    headers.length >= 10 &&
-    (col0 === "url" || col1 === "date" || col1.includes("date"));
-  if (looksLikeStandardTenCol) {
+  const looksLikeStandardLayout =
+    col0 === "url" || col1 === "date" || col1.includes("date");
+
+  /** Legacy: URL…Report ID with eCPM + CTR columns still in the sheet */
+  if (looksLikeStandardLayout && headers.length >= 10) {
     const rows: RevenueUploadInputRow[] = [];
     const DI = 1;
     const II = 4;
     const CI = 5;
     const RI = 8;
     const PI = 9;
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!Array.isArray(row)) continue;
+      if (rowIsEffectivelyEmpty(row)) continue;
+      pushRowFromIndices(rows, row, DI, II, CI, RI, PI);
+    }
+    return { rows, error: null };
+  }
+
+  /** Current: 8 columns — no eCPM / CTR in file */
+  if (looksLikeStandardLayout && headers.length >= 8) {
+    const rows: RevenueUploadInputRow[] = [];
+    const DI = 1;
+    const II = 4;
+    const CI = 5;
+    const RI = 6;
+    const PI = 7;
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       if (!Array.isArray(row)) continue;

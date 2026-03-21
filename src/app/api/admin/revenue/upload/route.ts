@@ -97,6 +97,8 @@ export async function POST(request: Request) {
       warnings: validation.warnings,
       stats: validation.stats,
       cleanedRowsCount: validation.cleanedRows.length,
+      derived: validation.derived,
+      daily_preview: validation.daily_preview,
     });
   }
 
@@ -225,5 +227,7 @@ export async function POST(request: Request) {
     imported: cleanedRows.length,
     errors: [],
     warnings: validation.warnings,
+    derived: validation.derived,
+    daily_preview: validation.daily_preview,
   });
 }

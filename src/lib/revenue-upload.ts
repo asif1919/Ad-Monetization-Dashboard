@@ -30,13 +30,73 @@ export type RevenueUploadStats = {
   max_stat_date: string | null;
 };
 
+/** Rolled up from all days in the file (after aggregation). eCPM/CTR/eCPC are not stored in the file. */
+export type RevenueUploadDerivedStats = {
+  total_impressions: number;
+  total_clicks: number;
+  total_revenue: number;
+  /** Revenue per 1k impressions (USD) */
+  ecpm: number | null;
+  /** CTR (%): clicks ÷ impressions × 100 */
+  ctr_pct: number | null;
+  /** Revenue / click (USD) */
+  ecpc: number | null;
+};
+
+export type DailyPreviewRow = {
+  stat_date: string;
+  impressions: number;
+  clicks: number;
+  revenue: number;
+  ecpm: number | null;
+  ctr_pct: number | null;
+  ecpc: number | null;
+};
+
 export type ValidatePublisherUploadResult = {
   ok: boolean;
   errors: string[];
   warnings: string[];
   cleanedRows: CleanedDailyRow[];
   stats: RevenueUploadStats;
+  /** Present when ok and there is at least one day of data */
+  derived: RevenueUploadDerivedStats | null;
+  daily_preview: DailyPreviewRow[];
 };
+
+export function computeDerivedTotals(rows: CleanedDailyRow[]): RevenueUploadDerivedStats {
+  let imp = 0;
+  let clk = 0;
+  let rev = 0;
+  for (const r of rows) {
+    imp += r.impressions;
+    clk += r.clicks;
+    rev += r.revenue;
+  }
+  return {
+    total_impressions: imp,
+    total_clicks: clk,
+    total_revenue: rev,
+    ecpm: imp > 0 ? (rev / imp) * 1000 : null,
+    ctr_pct: imp > 0 ? (clk / imp) * 100 : null,
+    ecpc: clk > 0 ? rev / clk : null,
+  };
+}
+
+function enrichDailyRow(r: CleanedDailyRow): DailyPreviewRow {
+  const imp = r.impressions;
+  const clk = r.clicks;
+  const rev = r.revenue;
+  return {
+    stat_date: r.stat_date,
+    impressions: imp,
+    clicks: clk,
+    revenue: rev,
+    ecpm: imp > 0 ? (rev / imp) * 1000 : null,
+    ctr_pct: imp > 0 ? (clk / imp) * 100 : null,
+    ecpc: clk > 0 ? rev / clk : null,
+  };
+}
 
 /**
  * Validates rows for a given calendar month/year, aggregates multiple file rows per day
@@ -140,6 +200,8 @@ export function validatePublisherUploadRows(
         min_stat_date: null,
         max_stat_date: null,
       },
+      derived: null,
+      daily_preview: [],
     };
   }
 
@@ -177,6 +239,9 @@ export function validatePublisherUploadRows(
   const min_stat_date = dates[0] ?? null;
   const max_stat_date = dates[dates.length - 1] ?? null;
 
+  const derived = computeDerivedTotals(deduped);
+  const daily_preview = deduped.map(enrichDailyRow);
+
   return {
     ok: true,
     errors: [],
@@ -189,5 +254,7 @@ export function validatePublisherUploadRows(
       min_stat_date,
       max_stat_date,
     },
+    derived,
+    daily_preview,
   };
 }

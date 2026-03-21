@@ -6,7 +6,11 @@ import {
   parsePublisherRevenueReportRows,
   PUBLISHER_REPORT_HEADER_NAMES,
 } from "@/lib/import-excel";
-import type { RevenueUploadInputRow } from "@/lib/revenue-upload";
+import type {
+  RevenueUploadInputRow,
+  RevenueUploadDerivedStats,
+  DailyPreviewRow,
+} from "@/lib/revenue-upload";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -24,7 +28,24 @@ type PreviewResponse = {
   warnings: string[];
   stats: PreviewStats;
   cleanedRowsCount: number;
+  derived: RevenueUploadDerivedStats | null;
+  daily_preview: DailyPreviewRow[];
 };
+
+function fmtUsd(n: number) {
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function fmtMetric(n: number | null, digits = 2) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
 
 export type UploadReportModalProps = {
   open: boolean;
@@ -147,6 +168,8 @@ export function UploadReportModal({
             max_stat_date: null,
           },
           cleanedRowsCount: typeof data.cleanedRowsCount === "number" ? data.cleanedRowsCount : 0,
+          derived: data.derived ?? null,
+          daily_preview: Array.isArray(data.daily_preview) ? data.daily_preview : [],
         });
         setPhase(data.ok ? "ready" : "idle");
         if (!data.ok) {
@@ -220,6 +243,17 @@ export function UploadReportModal({
         setPhase("ready");
         return;
       }
+      setPreview((p) =>
+        p
+          ? {
+              ...p,
+              derived: data.derived ?? p.derived,
+              daily_preview: Array.isArray(data.daily_preview)
+                ? data.daily_preview
+                : p.daily_preview,
+            }
+          : p
+      );
       setPhase("success");
       onSuccess?.();
     } catch (e) {
@@ -294,7 +328,8 @@ export function UploadReportModal({
             Required layout (first sheet only — row 1 = column titles like Excel, data from row
             2). Dates use <strong>DD/MM/YYYY</strong> (example:{" "}
             <code className="bg-gray-100 px-1.5 py-0.5 rounded text-sm">17/03/2026</code>).
-            Multiple rows for the same day are summed.
+            Multiple rows for the same day are summed. <strong>eCPM</strong>, <strong>CTR</strong>, and{" "}
+            <strong>eCPC</strong> are not columns in the file — they are calculated after upload.
           </p>
           <div className="overflow-x-auto">
             <table
@@ -330,12 +365,6 @@ export function UploadReportModal({
                     42
                   </td>
                   <td className="border border-gray-300 px-2.5 py-2 text-right whitespace-nowrap">
-                    1.25
-                  </td>
-                  <td className="border border-gray-300 px-2.5 py-2 text-right whitespace-nowrap">
-                    0.34%
-                  </td>
-                  <td className="border border-gray-300 px-2.5 py-2 text-right whitespace-nowrap">
                     128.50
                   </td>
                   <td
@@ -346,14 +375,32 @@ export function UploadReportModal({
                   </td>
                 </tr>
               </tbody>
+              <tfoot>
+                <tr className="bg-amber-50/80">
+                  <td
+                    colSpan={8}
+                    className="border border-gray-300 px-3 py-2 text-sm text-gray-800"
+                  >
+                    <span className="font-medium text-gray-900">Calculated after upload</span>
+                    <span className="text-gray-600">
+                      {" "}
+                      (not in the file — same as preview): using the sample row above,{" "}
+                      <strong>eCPM</strong> ≈ $10.28, <strong>CTR</strong> ≈ 0.34%,{" "}
+                      <strong>eCPC</strong> ≈ $3.06.
+                    </span>
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
           <p className="text-sm leading-relaxed text-gray-700 px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <strong>Used for import:</strong> Date (column B), Impressions (E), Click (F), Net
-            revenue (USD) (I). <strong>Must match month:</strong> {periodLabel}. If{" "}
-            <strong>Report ID</strong> (column J) is filled, it must match the Report ID shown
-            above. URL, Ad Format, Device, eCPM, and CTR Rate are optional for storage but can
-            stay in the file for clarity.
+            <strong>Used for import:</strong> Date (B), Impressions (E), Click (F), Net revenue
+            (USD) (G), Report ID (H). <strong>Must match month:</strong> {periodLabel}. If{" "}
+            <strong>Report ID</strong> is filled, it must match the Report ID shown above. URL,
+            Ad Format, and Device are optional for storage but help keep the sheet clear.{" "}
+            <strong>eCPM</strong>, <strong>CTR</strong> (% of impressions that clicked), and{" "}
+            <strong>eCPC</strong> are always computed from impressions, clicks, and revenue — not
+            pasted into the file.
           </p>
         </div>
 
@@ -456,6 +503,125 @@ export function UploadReportModal({
                 </strong>
               </li>
             </ul>
+
+            {preview.ok && preview.derived && (
+              <div className="mt-4 space-y-4 border-t border-gray-100 pt-4">
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-1">Calculated from your file</h4>
+                  <p className="text-xs text-gray-600 mb-3">
+                    Totals below use only impressions, clicks, and net revenue from the file.{" "}
+                    <strong>eCPM</strong> = revenue ÷ impressions × 1,000;{" "}
+                    <strong>CTR</strong> = clicks ÷ impressions × 100 (%);{" "}
+                    <strong>eCPC</strong> = revenue ÷ clicks.
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-sm">
+                    <div className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                      <div className="text-xs text-gray-500">Impressions</div>
+                      <div className="font-semibold text-gray-900">
+                        {preview.derived.total_impressions.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                      <div className="text-xs text-gray-500">Clicks</div>
+                      <div className="font-semibold text-gray-900">
+                        {preview.derived.total_clicks.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                      <div className="text-xs text-gray-500">Net revenue (USD)</div>
+                      <div className="font-semibold text-gray-900">
+                        ${fmtUsd(preview.derived.total_revenue)}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                      <div className="text-xs text-gray-500">eCPM (USD)</div>
+                      <div className="font-semibold text-gray-900">
+                        {preview.derived.ecpm == null
+                          ? "—"
+                          : `$${fmtMetric(preview.derived.ecpm, 2)}`}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                      <div className="text-xs text-gray-500">CTR (%)</div>
+                      <div className="font-semibold text-gray-900">
+                        {preview.derived.ctr_pct == null
+                          ? "—"
+                          : `${fmtMetric(preview.derived.ctr_pct, 2)}%`}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                      <div className="text-xs text-gray-500">eCPC (USD)</div>
+                      <div className="font-semibold text-gray-900">
+                        {preview.derived.ecpc == null
+                          ? "—"
+                          : `$${fmtMetric(preview.derived.ecpc, 4)}`}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {preview.daily_preview.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-900 mb-2">By day (import preview)</h4>
+                    <div className="overflow-x-auto rounded-md border border-gray-200 max-h-56 overflow-y-auto">
+                      <table className="min-w-full text-xs text-left">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b">Date</th>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
+                              Impr.
+                            </th>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
+                              Clicks
+                            </th>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
+                              Revenue
+                            </th>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
+                              eCPM
+                            </th>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
+                              CTR (%)
+                            </th>
+                            <th className="px-2 py-2 font-medium text-gray-700 border-b text-right">
+                              eCPC
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {preview.daily_preview.map((d) => (
+                            <tr key={d.stat_date} className="border-b border-gray-100">
+                              <td className="px-2 py-1.5 font-mono text-gray-800 whitespace-nowrap">
+                                {d.stat_date}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-gray-800">
+                                {d.impressions.toLocaleString()}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-gray-800">
+                                {d.clicks.toLocaleString()}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-gray-800">
+                                ${fmtUsd(d.revenue)}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-gray-800">
+                                {d.ecpm == null ? "—" : `$${fmtMetric(d.ecpm, 2)}`}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-gray-800">
+                                {d.ctr_pct == null ? "—" : `${fmtMetric(d.ctr_pct, 2)}%`}
+                              </td>
+                              <td className="px-2 py-1.5 text-right text-gray-800">
+                                {d.ecpc == null ? "—" : `$${fmtMetric(d.ecpc, 4)}`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {preview.errors.length > 0 && (
               <div className="mt-3">
                 <p className="text-red-700 font-medium text-xs mb-1">Errors</p>
