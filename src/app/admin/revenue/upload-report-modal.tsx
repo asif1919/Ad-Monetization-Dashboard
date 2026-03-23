@@ -69,6 +69,42 @@ function monthLabel(month: number, year: number) {
   });
 }
 
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
+const currentYear = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 8 }, (_, i) => currentYear - 3 + i);
+
+/** ISO bounds for the calendar month (inclusive). */
+function monthBoundsIso(year: number, month: number): { start: string; end: string } {
+  const lastDay = new Date(year, month, 0).getDate();
+  return {
+    start: `${year}-${String(month).padStart(2, "0")}-01`,
+    end: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
+/** Client-side double-check that preview date range fits the selected import month. */
+function validateFileDatesAgainstSelectedMonth(
+  stats: PreviewStats,
+  month: number,
+  year: number
+): { ok: true } | { ok: false; message: string } {
+  if (!stats.min_stat_date || !stats.max_stat_date) {
+    return {
+      ok: false,
+      message:
+        "Date check failed: preview has no date range. Fix the file or adjust the import month.",
+    };
+  }
+  const { start, end } = monthBoundsIso(year, month);
+  if (stats.min_stat_date < start || stats.max_stat_date > end) {
+    return {
+      ok: false,
+      message: `Date check failed: file dates are ${stats.min_stat_date} – ${stats.max_stat_date}, but the selected import period is ${monthLabel(month, year)} (${start} through ${end}). Change the month/year above or use a file that only contains dates in that month.`,
+    };
+  }
+  return { ok: true };
+}
+
 function formatDateRangeLabel(
   min: string | null,
   max: string | null,
@@ -122,6 +158,9 @@ export function UploadReportModal({
   );
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /** Import period (editable); initialized from page when modal opens. */
+  const [uploadMonth, setUploadMonth] = useState(month);
+  const [uploadYear, setUploadYear] = useState(year);
 
   const reset = useCallback(() => {
     setPhase("idle");
@@ -137,8 +176,15 @@ export function UploadReportModal({
     if (!open) reset();
   }, [open, reset]);
 
+  useEffect(() => {
+    if (open) {
+      setUploadMonth(month);
+      setUploadYear(year);
+    }
+  }, [open, month, year]);
+
   const runPreview = useCallback(
-    async (rows: RevenueUploadInputRow[]) => {
+    async (rows: RevenueUploadInputRow[], periodMonth: number, periodYear: number) => {
       setPhase("previewing");
       setMessage(null);
       setPreview(null);
@@ -148,8 +194,8 @@ export function UploadReportModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             mode: "preview",
-            month,
-            year,
+            month: periodMonth,
+            year: periodYear,
             publisher_id: publisherId,
             rows,
           }),
@@ -209,7 +255,7 @@ export function UploadReportModal({
         setPhase("error");
       }
     },
-    [month, year, publisherId]
+    [publisherId]
   );
 
   const processFile = useCallback(
@@ -245,17 +291,27 @@ export function UploadReportModal({
           return;
         }
         setParsedRows(rows);
-        await runPreview(rows);
+        await runPreview(rows, uploadMonth, uploadYear);
       } catch (e) {
         setMessage(e instanceof Error ? e.message : "Could not read file");
         setPhase("error");
       }
     },
-    [runPreview]
+    [runPreview, uploadMonth, uploadYear]
   );
 
   const handleCommit = useCallback(async () => {
     if (!parsedRows || !preview?.ok) return;
+    const dateCheck = validateFileDatesAgainstSelectedMonth(
+      preview.stats,
+      uploadMonth,
+      uploadYear
+    );
+    if (!dateCheck.ok) {
+      setMessage(dateCheck.message);
+      setPhase("ready");
+      return;
+    }
     setPhase("committing");
     setMessage(null);
     try {
@@ -264,8 +320,8 @@ export function UploadReportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "commit",
-          month,
-          year,
+          month: uploadMonth,
+          year: uploadYear,
           publisher_id: publisherId,
           rows: parsedRows,
         }),
@@ -306,7 +362,7 @@ export function UploadReportModal({
       setMessage(e instanceof Error ? e.message : "Upload failed");
       setPhase("ready");
     }
-  }, [month, year, publisherId, parsedRows, preview?.ok, onSuccess]);
+  }, [uploadMonth, uploadYear, publisherId, parsedRows, preview, onSuccess]);
 
   const handleClose = () => {
     reset();
@@ -315,9 +371,15 @@ export function UploadReportModal({
 
   if (!open) return null;
 
-  const periodLabel = monthLabel(month, year);
+  const periodLabel = monthLabel(uploadMonth, uploadYear);
+  const { start: periodStartIso, end: periodEndIso } = monthBoundsIso(
+    uploadYear,
+    uploadMonth
+  );
+  const periodBusy =
+    phase === "parsing" || phase === "previewing" || phase === "committing";
   const canCommit =
-    phase === "ready" && preview?.ok && parsedRows && preview.cleanedRowsCount > 0;
+   phase === "ready" && preview?.ok && parsedRows && preview.cleanedRowsCount > 0;
 
   return (
     <div
@@ -355,8 +417,53 @@ export function UploadReportModal({
                 </span>
               )}
             </p>
-            <p className="text-sm text-gray-700 mt-2">
-              Period: <span className="font-medium">{periodLabel}</span>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-gray-700">Import month</span>
+              <select
+                value={uploadMonth}
+                disabled={periodBusy}
+                onChange={(e) => {
+                  const m = Number(e.target.value);
+                  setUploadMonth(m);
+                  setMessage(null);
+                  if (parsedRows) void runPreview(parsedRows, m, uploadYear);
+                }}
+                className="rounded border border-gray-300 px-2 py-1.5 text-sm bg-white text-gray-900 disabled:opacity-50"
+                aria-label="Import month"
+              >
+                {MONTH_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {new Date(2000, m - 1, 1).toLocaleString(undefined, {
+                      month: "long",
+                    })}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={uploadYear}
+                disabled={periodBusy}
+                onChange={(e) => {
+                  const y = Number(e.target.value);
+                  setUploadYear(y);
+                  setMessage(null);
+                  if (parsedRows) void runPreview(parsedRows, uploadMonth, y);
+                }}
+                className="rounded border border-gray-300 px-2 py-1.5 text-sm bg-white text-gray-900 disabled:opacity-50"
+                aria-label="Import year"
+              >
+                {YEAR_OPTIONS.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-gray-500 mt-1.5">
+              <span className="font-medium text-gray-700">{periodLabel}</span>
+              {" · "}
+              File dates must fall between <code className="text-xs bg-gray-100 px-1 rounded">{periodStartIso}</code>{" "}
+              and <code className="text-xs bg-gray-100 px-1 rounded">{periodEndIso}</code>. Preview and upload both
+              validate this.
             </p>
           </div>
           <button
@@ -439,15 +546,7 @@ export function UploadReportModal({
               </tfoot>
             </table>
           </div>
-          <p className="text-sm leading-relaxed text-gray-700 px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <strong>Used for import:</strong> Date (B), Impressions (E), Click (F), Net revenue
-            (USD) (G), Report ID (H). <strong>Must match month:</strong> {periodLabel}. If{" "}
-            <strong>Report ID</strong> is filled, it must match the Report ID shown above. URL,
-            Ad Format, and Device are optional for storage but help keep the sheet clear.{" "}
-            <strong>eCPM</strong>, <strong>CTR</strong> (% of impressions that clicked), and{" "}
-            <strong>eCPC</strong> are always computed from impressions, clicks, and revenue — not
-            pasted into the file.
-          </p>
+         
         </div>
 
         <div
@@ -488,7 +587,7 @@ export function UploadReportModal({
               type="button"
               className="text-blue-600 font-medium hover:underline"
               onClick={() => fileInputRef.current?.click()}
-              disabled={phase === "parsing" || phase === "previewing" || phase === "committing"}
+              disabled={periodBusy}
             >
               browse
             </button>
@@ -548,6 +647,22 @@ export function UploadReportModal({
                   )}
                 </strong>
               </li>
+              {preview.ok &&
+                preview.stats.min_stat_date &&
+                preview.stats.max_stat_date &&
+                validateFileDatesAgainstSelectedMonth(
+                  preview.stats,
+                  uploadMonth,
+                  uploadYear
+                ).ok && (
+                  <li className="text-green-800">
+                    Date check:{" "}
+                    <strong>
+                      All file dates are within the selected month ({periodLabel})
+                    </strong>{" "}
+                    ({periodStartIso} – {periodEndIso}).
+                  </li>
+                )}
             </ul>
 
             {preview.ok && preview.derived && (
@@ -716,7 +831,7 @@ export function UploadReportModal({
 
         {phase === "success" && (
           <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-            Upload completed successfully.
+            Upload completed successfully for <strong>{periodLabel}</strong>.
           </div>
         )}
 

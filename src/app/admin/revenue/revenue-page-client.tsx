@@ -61,9 +61,7 @@ function RevenuePageClientInner({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [editTargets, setEditTargets] = useState<Record<string, string>>({});
   const [estimateModal, setEstimateModal] = useState<
-    | null
-    | { mode: "all"; startDay: number; endDay: number }
-    | { mode: "single"; row: TargetRow; startDay: number; endDay: number }
+    null | { row: TargetRow; startDay: number; endDay: number }
   >(null);
   const [uploadModal, setUploadModal] = useState<TargetRow | null>(null);
   const openedUploadFromUrlRef = useRef(false);
@@ -141,22 +139,6 @@ function RevenuePageClientInner({
     }
   }
 
-  async function ensureAllTargetsSaved() {
-    // Save any edited monthly targets before generating estimates
-    for (const row of targets) {
-      const v = editTargets[row.publisher_id];
-      if (v != null && v !== "" && parseFloat(v) !== row.target_revenue) {
-        // eslint-disable-next-line no-await-in-loop
-        await saveTarget(row.publisher_id, v);
-      }
-    }
-  }
-
-  function openGenerateAllModal() {
-    const dim = daysInMonth(year, month);
-    setEstimateModal({ mode: "all", startDay: 1, endDay: dim });
-  }
-
   function openGenerateSingleModal(row: TargetRow) {
     const dim = daysInMonth(year, month);
     const r = resolvePublisherStatRange(row.created_at, year, month, null, null);
@@ -166,7 +148,7 @@ function RevenuePageClientInner({
       );
       return;
     }
-    setEstimateModal({ mode: "single", row, startDay: r.first, endDay: r.last });
+    setEstimateModal({ row, startDay: r.first, endDay: r.last });
   }
 
   function clampModalDays(
@@ -193,43 +175,25 @@ function RevenuePageClientInner({
     setEstimateLoading(true);
     setEstimateModal(null);
     try {
-      if (modal.mode === "all") {
-        await ensureAllTargetsSaved();
-        const res = await fetch("/api/admin/revenue/estimate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            month,
-            year,
-            start_day: startDay,
-            end_day: endDay,
-          }),
-        });
-        if (res.ok) {
-          await loadTargets();
-          router.refresh();
-        }
-      } else {
-        const row = modal.row;
-        const v = editTargets[row.publisher_id];
-        if (v != null && v !== "" && parseFloat(v) !== row.target_revenue) {
-          await saveTarget(row.publisher_id, v);
-        }
-        const res = await fetch("/api/admin/revenue/estimate/publisher", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            publisher_id: row.publisher_id,
-            month,
-            year,
-            start_day: startDay,
-            end_day: endDay,
-          }),
-        });
-        if (res.ok) {
-          await loadTargets();
-          router.refresh();
-        }
+      const row = modal.row;
+      const v = editTargets[row.publisher_id];
+      if (v != null && v !== "" && parseFloat(v) !== row.target_revenue) {
+        await saveTarget(row.publisher_id, v);
+      }
+      const res = await fetch("/api/admin/revenue/estimate/publisher", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publisher_id: row.publisher_id,
+          month,
+          year,
+          start_day: startDay,
+          end_day: endDay,
+        }),
+      });
+      if (res.ok) {
+        await loadTargets();
+        router.refresh();
       }
     } finally {
       setEstimateLoading(false);
@@ -282,18 +246,10 @@ function RevenuePageClientInner({
 
       {/* Per-publisher monthly targets */}
       <section className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
           <h2 className="font-medium text-gray-900">
             Per-publisher monthly targets
           </h2>
-          <button
-            type="button"
-            onClick={openGenerateAllModal}
-            disabled={estimateLoading}
-            className="rounded bg-blue-600 px-4 py-2 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-          >
-            {estimateLoading ? "Generating all…" : "Generate all estimates"}
-          </button>
         </div>
         {loadingTargets ? (
           <p className="p-4 text-gray-600">Loading…</p>
@@ -445,21 +401,12 @@ function RevenuePageClientInner({
               id="estimate-modal-title"
               className="text-lg font-semibold text-gray-900 mb-1"
             >
-              {estimateModal.mode === "all"
-                ? "Generate estimates for all publishers"
-                : `Generate estimates — ${estimateModal.row.name}`}
+              Generate estimates — {estimateModal.row.name}
             </h2>
             <p className="text-sm text-gray-600 mb-4">
               {monthName(month)} {year} · Adjust the day range if needed. The
               full monthly target is spread across the selected days.
-              {estimateModal.mode === "all" && (
-                <>
-                  {" "}
-                  Each publisher still cannot start before their account
-                  creation date.
-                </>
-              )}
-              {estimateModal.mode === "single" && estimateModal.row.created_at && (
+              {estimateModal.row.created_at && (
                 <>
                   {" "}
                   Earliest day allowed by join date:{" "}
@@ -613,10 +560,11 @@ function RevenuePageClientInner({
               </button>
               <button
                 type="button"
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                disabled={estimateLoading}
+                className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                 onClick={() => void confirmGenerateFromModal()}
               >
-                Generate
+                {estimateLoading ? "Generating…" : "Generate"}
               </button>
             </div>
           </div>
