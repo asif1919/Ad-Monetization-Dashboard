@@ -273,7 +273,7 @@ export default async function DashboardOverviewPage() {
         {showEstimatedBadge && (
           <span
             className="inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20"
-            title="Numbers are based on monthly targets until real data is imported."
+            title="Numbers are based on monthly targets until your traffic data is finalized for the month."
           >
             Estimated until month-end
           </span>

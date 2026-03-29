@@ -6,12 +6,10 @@ import { useToast } from "@/components/ui/toast-provider";
 
 export function TicketReplyForm({
   id,
-  initialReply,
 }: {
   id: string;
-  initialReply: string;
 }) {
-  const [reply, setReply] = useState(initialReply);
+  const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(false);
   const { show } = useToast();
   const router = useRouter();

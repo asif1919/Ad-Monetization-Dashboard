@@ -81,7 +81,7 @@ export default async function DashboardLayout({
   const nav = [
     { href: "/dashboard", label: "Overview" },
     { href: "/dashboard/reports", label: "Reports" },
-    { href: "/dashboard/payments", label: "Payments" },
+    { href: "/dashboard/payments#invoices", label: "Payments & invoices" },
     { href: "/dashboard/support", label: "Support", support: true },
   ] as const;
 

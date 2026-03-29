@@ -3,58 +3,94 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function GenerateButton() {
+type Props = {
+  /** Same period as the page filter — no separate date pickers. */
+  month: number;
+  year: number;
+};
+
+type SkippedRow = {
+  publisher_id: string;
+  name: string | null;
+  reason: string;
+};
+
+/** Batch-creates invoice PDFs + invoice/payout rows for this month for every publisher with imported stats who does not have an invoice yet (admin backfill). */
+export function GenerateInvoicesButton({ month, year }: Props) {
   const router = useRouter();
-  const [month, setMonth] = useState(String(new Date().getMonth() || 12));
-  const [year, setYear] = useState(String(new Date().getFullYear()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<{
+    generated: number;
+    skipped: SkippedRow[];
+  } | null>(null);
 
   async function generate() {
     setError(null);
+    setLastResult(null);
     setLoading(true);
     const res = await fetch("/api/admin/invoices/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: Number(month), year: Number(year) }),
+      body: JSON.stringify({ month, year }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      generated?: number;
+      skipped?: SkippedRow[];
+    };
     setLoading(false);
     if (!res.ok) {
       setError(data.error ?? "Failed to generate");
       return;
     }
+    setLastResult({
+      generated: typeof data.generated === "number" ? data.generated : 0,
+      skipped: Array.isArray(data.skipped) ? data.skipped : [],
+    });
     router.refresh();
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <select
-        value={month}
-        onChange={(e) => setMonth(e.target.value)}
-        className="rounded border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900"
-      >
-        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-          <option key={m} value={m}>{m}</option>
-        ))}
-      </select>
-      <input
-        type="number"
-        min={2020}
-        max={2030}
-        value={year}
-        onChange={(e) => setYear(e.target.value)}
-        className="w-20 rounded border border-gray-300 px-3 py-2 text-sm bg-white text-gray-900"
-      />
+    <div className="flex flex-col gap-2 w-full max-w-md">
       <button
         type="button"
         onClick={generate}
         disabled={loading}
-        className="rounded bg-blue-600 px-4 py-2 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+        className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-900 hover:bg-blue-100 disabled:opacity-50 whitespace-normal text-left"
+        title="Creates missing invoice PDFs and payout lines from imported traffic data for publishers who have not generated one yet this month."
       >
-        {loading ? "Generating…" : "Generate invoices"}
+        {loading ? "Generating…" : `Create missing invoices for ${month}/${year}`}
       </button>
-      {error && <span className="text-sm text-red-600">{error}</span>}
+      <p className="text-xs text-gray-500 leading-snug">
+        Optional: runs after you import traffic. Use this to batch-create PDFs for publishers who did not create
+        their own. Already-existing invoices for this month are left as-is.
+      </p>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {lastResult && !error && (
+        <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-800">
+          <p className="font-medium text-gray-900">
+            Created {lastResult.generated} new invoice{lastResult.generated === 1 ? "" : "s"} for {month}/{year}.
+          </p>
+          {lastResult.skipped.length > 0 && (
+            <div className="mt-2">
+              <p className="text-amber-900 font-medium text-xs">
+                Skipped {lastResult.skipped.length} publisher
+                {lastResult.skipped.length === 1 ? "" : "s"} (no imported daily stats for this month):
+              </p>
+              <ul className="mt-1 list-disc list-inside text-xs text-gray-700 max-h-40 overflow-y-auto space-y-0.5">
+                {lastResult.skipped.map((s) => (
+                  <li key={s.publisher_id}>
+                    <span className="font-medium">{s.name ?? s.publisher_id}</span>
+                    {" — "}
+                    {s.reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

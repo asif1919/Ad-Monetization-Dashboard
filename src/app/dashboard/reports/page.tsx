@@ -101,7 +101,7 @@ export default async function ReportsPage({
         }}
       />
       <div className="mt-6">
-        <ReportDownload publisherId={publisherId} />
+        <ReportDownload />
       </div>
     </div>
   );

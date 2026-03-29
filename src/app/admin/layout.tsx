@@ -49,6 +49,7 @@ export default async function AdminLayout({
     { href: "/admin", label: "Overview" },
     { href: "/admin/publishers", label: "Publishers" },
     { href: "/admin/revenue", label: "Revenue & Payouts" },
+    { href: "/admin/invoices", label: "Invoices" },
     { href: "/admin/support", label: "Support", support: true },
   ] as const;
 

@@ -38,7 +38,10 @@ export async function GET(request: Request) {
 
   if (!config?.real_data_imported_at) {
     return NextResponse.json(
-      { error: "Report available only after real data is imported for this month" },
+      {
+        error:
+          "This report is not available yet. It will open once your monthly traffic data is finalized for this period.",
+      },
       { status: 403 }
     );
   }

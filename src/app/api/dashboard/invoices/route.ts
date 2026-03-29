@@ -1,4 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  buildPublisherMonthsWithRealStats,
+  invoiceMatchesRealStatsMonth,
+  monthKey,
+} from "@/lib/invoice-real-months";
+import { currentAndPreviousCalendarMonthUtc } from "@/lib/invoice-month-window";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -23,5 +29,32 @@ export async function GET() {
     .order("year", { ascending: false })
     .order("month", { ascending: false });
 
-  return NextResponse.json({ invoices: invoices ?? [] });
+  const { data: realRows } = await supabase
+    .from("daily_stats")
+    .select("publisher_id, stat_date")
+    .eq("publisher_id", publisherId)
+    .eq("is_estimated", false);
+
+  const realMonthsByPublisher = buildPublisherMonthsWithRealStats(
+    (realRows ?? []) as { publisher_id: string; stat_date: string }[]
+  );
+
+  const filtered = (invoices ?? []).filter((inv) =>
+    invoiceMatchesRealStatsMonth(
+      {
+        publisher_id: publisherId,
+        year: inv.year as number,
+        month: inv.month as number,
+      },
+      realMonthsByPublisher
+    )
+  );
+
+  const months = realMonthsByPublisher.get(publisherId) ?? new Set<string>();
+  const eligibilityByMonthKey: Record<string, boolean> = {};
+  for (const { year, month } of currentAndPreviousCalendarMonthUtc()) {
+    eligibilityByMonthKey[monthKey(year, month)] = months.has(monthKey(year, month));
+  }
+
+  return NextResponse.json({ invoices: filtered, eligibilityByMonthKey });
 }

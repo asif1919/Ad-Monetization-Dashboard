@@ -95,7 +95,7 @@ export default async function AdminSupportDetailPage({
           </div>
         </div>
         <div className="mt-4 border-t border-gray-200 pt-3">
-          <TicketReplyForm id={ticket.id} initialReply={ticket.message ?? ""} />
+          <TicketReplyForm id={ticket.id} />
         </div>
       </div>
     </div>
