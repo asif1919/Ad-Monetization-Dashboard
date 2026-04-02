@@ -111,8 +111,7 @@ export function PublisherForm({ publisher }: { publisher?: Publisher }) {
             </code>
           </div>
           <p className="text-xs text-gray-600 mt-1">
-            Use this ID in monthly Excel reports (e.g. TM_report_stats.xlsx) to
-            link rows to this publisher.
+            Public identifier for this publisher (e.g. integrations or reporting references).
           </p>
         </div>
       )}

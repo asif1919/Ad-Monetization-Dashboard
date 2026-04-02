@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { OverviewCards } from "./overview-cards";
 import { RevenueChart } from "./revenue-chart";
-import { isRealDailyStatRow } from "@/lib/daily-stats-flags";
 import { getEffectiveStatsAtTime } from "@/lib/time-segments";
 import { CurrentDateLabel } from "./current-date-label";
 import { MonthlyDataTable } from "./monthly-table";
@@ -55,19 +54,19 @@ export default async function DashboardOverviewPage() {
   const [todayRes, yesterdayRes, monthRes, prevMonthRes, chartRes] = await Promise.all([
     supabase
       .from("daily_stats")
-      .select("stat_date, revenue, impressions, clicks, is_estimated, time_segments")
+      .select("stat_date, revenue, impressions, clicks, time_segments")
       .eq("publisher_id", publisherId)
       .eq("stat_date", today)
       .maybeSingle(),
     supabase
       .from("daily_stats")
-      .select("revenue, impressions, clicks, is_estimated")
+      .select("revenue, impressions, clicks")
       .eq("publisher_id", publisherId)
       .eq("stat_date", yesterdayStr)
       .maybeSingle(),
     supabase
       .from("daily_stats")
-      .select("stat_date, revenue, impressions, clicks, is_estimated, time_segments")
+      .select("stat_date, revenue, impressions, clicks, time_segments")
       .eq("publisher_id", publisherId)
       .gte("stat_date", monthStart)
       .lte("stat_date", today),
@@ -79,7 +78,7 @@ export default async function DashboardOverviewPage() {
       .lte("stat_date", prevMonthEndStr),
     supabase
       .from("daily_stats")
-      .select("stat_date, revenue, impressions, ecpm, is_estimated, time_segments")
+      .select("stat_date, revenue, impressions, ecpm, time_segments")
       .eq("publisher_id", publisherId)
       .gte("stat_date", chartLast30Start)
       .lte("stat_date", realToday)
@@ -263,21 +262,10 @@ export default async function DashboardOverviewPage() {
     return d;
   }) as typeof chartData;
 
-  const hasRealDataThisMonth = (monthStats ?? []).some(isRealDailyStatRow);
-  const showEstimatedBadge = (monthStats ?? []).length > 0 && !hasRealDataThisMonth;
-
   return (
     <div>
       <div className="flex items-center gap-3 mb-2">
         <h1 className="text-2xl font-semibold text-gray-900">Overview</h1>
-        {showEstimatedBadge && (
-          <span
-            className="inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20"
-            title="Numbers are based on monthly targets until your traffic data is finalized for the month."
-          >
-            Estimated until month-end
-          </span>
-        )}
       </div>
       <CurrentDateLabel />
       <OverviewCards
@@ -324,9 +312,6 @@ export default async function DashboardOverviewPage() {
           <h2 className="text-lg font-medium text-gray-900">
             Revenue trend (last 30 days)
           </h2>
-          {showEstimatedBadge && (
-            <span className="text-xs text-amber-700">Estimated data</span>
-          )}
         </div>
         <RevenueChart data={chartData ?? []} />
       </div>

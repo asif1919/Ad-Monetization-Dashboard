@@ -198,9 +198,9 @@ export default async function InvoicesPage({
         </table>
         {rows.length === 0 && (
           <p className="p-4 text-gray-600">
-            No invoices or payouts for this month yet. Import traffic under Revenue &amp; Payouts, then either use
-            &quot;Create missing invoices&quot; above or let publishers create their own — then mark paid when
-            ready.
+            No invoices or payouts for this month yet. Ensure publishers have daily stats (e.g. generate estimates
+            under Revenue &amp; Payouts), then use &quot;Create missing invoices&quot; or let publishers create PDFs —
+            then mark paid when ready.
           </p>
         )}
       </div>

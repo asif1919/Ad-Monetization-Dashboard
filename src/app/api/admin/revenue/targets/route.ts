@@ -44,24 +44,15 @@ export async function GET(request: Request) {
     .eq("month", monthNum)
     .eq("year", yearNum);
 
-  const { data: monthlyConfig } = await supabase
-    .from("monthly_config")
-    .select("real_data_imported_at")
-    .eq("month", monthNum)
-    .eq("year", yearNum)
-    .maybeSingle();
-
   const { data: stats } = await supabase
     .from("daily_stats")
-    .select("publisher_id, is_estimated")
+    .select("publisher_id")
     .gte("stat_date", startDate)
     .lte("stat_date", endDate);
 
-  const { data: logs } = await supabase
-    .from("import_logs")
-    .select("unmatched_data, errors, created_at")
-    .gte("created_at", startDate)
-    .lte("created_at", endDate);
+  const hasStatsByPublisher = new Set(
+    (stats ?? []).map((r) => r.publisher_id as string)
+  );
 
   const targetByPublisher = new Map(
     (targets ?? []).map((t) => [
@@ -70,48 +61,10 @@ export async function GET(request: Request) {
     ])
   );
 
-  const estimateStatusByPublisher = new Map<string, "none" | "generated" | "skipped_real_data">();
-  for (const row of stats ?? []) {
-    const pid = row.publisher_id as string;
-    const isEstimated = row.is_estimated as boolean;
-    const current = estimateStatusByPublisher.get(pid);
-    if (isEstimated) {
-      if (!current) estimateStatusByPublisher.set(pid, "generated");
-    } else {
-      estimateStatusByPublisher.set(pid, "skipped_real_data");
-    }
-  }
-
-  type UploadStatus = "pending" | "uploaded" | "failed";
-  const uploadStatusByPublisher = new Map<string, UploadStatus>();
-  for (const log of logs ?? []) {
-    const createdAt = new Date(log.created_at as string | number | Date);
-    const entries = ([] as any[]).concat(log.unmatched_data ?? [], log.errors ?? []);
-    for (const entry of entries) {
-      if (
-        entry &&
-        typeof entry === "object" &&
-        "publisher_id" in entry &&
-        "month" in entry &&
-        "year" in entry &&
-        entry.month === monthNum &&
-        entry.year === yearNum
-      ) {
-        const pid = String(entry.publisher_id);
-        const status = entry.status as UploadStatus | undefined;
-        if (!status) continue;
-        const prev = uploadStatusByPublisher.get(pid);
-        if (!prev || createdAt > new Date()) {
-          uploadStatusByPublisher.set(pid, status);
-        }
-      }
-    }
-  }
-
   const list = (publishers ?? []).map((p) => {
-    const baseStatus: UploadStatus = "pending";
-    const upload_status = uploadStatusByPublisher.get(p.id) ?? baseStatus;
-    const estimate_status = estimateStatusByPublisher.get(p.id) ?? "none";
+    const estimate_status: "none" | "generated" = hasStatsByPublisher.has(p.id)
+      ? "generated"
+      : "none";
     const target = targetByPublisher.get(p.id);
     return {
       publisher_id: p.id,
@@ -122,14 +75,12 @@ export async function GET(request: Request) {
       is_active: p.status === "active",
       target_revenue: target?.target_revenue ?? 0,
       target_id: target?.id ?? null,
-      upload_status,
       estimate_status,
     };
   });
 
   return NextResponse.json({
     targets: list,
-    real_data_imported_at: monthlyConfig?.real_data_imported_at ?? null,
   });
 }
 

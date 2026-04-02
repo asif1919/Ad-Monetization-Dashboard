@@ -50,22 +50,6 @@ export async function POST(request: Request) {
     "0"
   )}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
 
-  const { data: realStats } = await supabase
-    .from("daily_stats")
-    .select("id")
-    .eq("publisher_id", publisher_id)
-    .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", false)
-    .limit(1);
-
-  if ((realStats ?? []).length > 0) {
-    return NextResponse.json({
-      skipped: true,
-      reason: "real_data_exists",
-    });
-  }
-
   const { data: target } = await supabase
     .from("publisher_monthly_targets")
     .select("target_revenue")
@@ -102,8 +86,7 @@ export async function POST(request: Request) {
     .delete()
     .eq("publisher_id", publisher_id)
     .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", true);
+    .lte("stat_date", endDate);
 
   if (!range) {
     return NextResponse.json({
@@ -130,7 +113,6 @@ export async function POST(request: Request) {
       impressions: r.impressions,
       clicks: r.clicks,
       revenue: r.revenue,
-      is_estimated: true,
       time_segments,
     };
   });

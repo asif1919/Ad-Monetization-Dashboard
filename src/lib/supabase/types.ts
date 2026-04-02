@@ -31,7 +31,6 @@ export interface MonthlyConfig {
   month: number;
   year: number;
   expected_revenue: number;
-  real_data_imported_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,7 +51,6 @@ export interface DailyStat {
   clicks: number;
   revenue: number;
   ecpm: number;
-  is_estimated: boolean;
   time_segments?: TimeSegment[] | null;
   created_at: string;
   updated_at: string;
@@ -83,17 +81,6 @@ export interface Invoice {
   revenue_share_pct: number;
   publisher_earnings: number;
   status: "pending" | "paid";
-  created_at: string;
-}
-
-export interface ImportLog {
-  id: string;
-  uploaded_by: string | null;
-  file_name: string;
-  total_rows: number;
-  imported_rows: number;
-  unmatched_data: unknown[];
-  errors: unknown[];
   created_at: string;
 }
 

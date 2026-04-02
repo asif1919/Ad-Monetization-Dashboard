@@ -6,6 +6,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Ad Monetization Dashboard",
   description: "Publisher Ad Revenue Platform",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

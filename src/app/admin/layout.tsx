@@ -55,18 +55,21 @@ export default async function AdminLayout({
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-56 bg-gray-900 text-white flex flex-col">
-        <div className="p-4 font-semibold border-b border-gray-700">
-          Admin
+      <aside className="w-64 flex flex-col bg-slate-950 text-slate-100 border-r border-slate-800/90 shadow-[inset_-1px_0_0_rgba(99,102,241,0.12)]">
+        <div className="px-4 py-5 border-b border-indigo-500/25 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-400">
+            Console
+          </p>
+          <p className="text-xl font-bold text-white mt-1.5 tracking-tight">Admin</p>
         </div>
-        <nav className="p-2 flex-1">
+        <nav className="p-3 flex-1 space-y-1">
           {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="block px-3 py-2 rounded hover:bg-gray-800 text-sm"
+              className="block px-3 py-3 rounded-lg text-base font-medium text-slate-300 hover:bg-indigo-950/70 hover:text-white transition-colors"
             >
-              <span className="inline-flex items-center">
+              <span className="inline-flex items-center gap-1">
                 {item.label}
                 {"support" in item && item.support && (
                   <AdminSupportIndicator initialHasNew={hasUnreadSupport} />
@@ -75,18 +78,18 @@ export default async function AdminLayout({
             </Link>
           ))}
         </nav>
-        <div className="p-2 border-t border-gray-700">
+        <div className="p-3 border-t border-slate-800/90">
           <form action="/auth/signout" method="post">
             <button
               type="submit"
-              className="w-full text-left px-3 py-2 rounded hover:bg-gray-800 text-sm"
+              className="w-full text-left px-3 py-3 rounded-lg text-base font-medium text-slate-400 hover:bg-slate-900 hover:text-slate-100 transition-colors"
             >
               Sign out
             </button>
           </form>
         </div>
       </aside>
-      <main className="flex-1 p-6 bg-gray-50 overflow-auto">{children}</main>
+      <main className="flex-1 p-6 bg-slate-50 overflow-auto">{children}</main>
     </div>
   );
 }

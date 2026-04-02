@@ -87,34 +87,37 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-56 bg-gray-800 text-white flex flex-col">
-        <div className="p-4 font-semibold border-b border-gray-700">
-          Publisher Dashboard
+      <aside className="w-64 flex flex-col bg-[#121212] text-red-50 border-r border-red-950 shadow-[inset_-1px_0_0_rgba(220,56,45,0.22)]">
+        <div className="px-4 py-5 border-b border-red-900/50 bg-gradient-to-br from-[#121212] via-[#1a0a0a] to-[#121212]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f55f4e]">
+            Workspace
+          </p>
+          <p className="text-xl font-bold text-white mt-1.5 tracking-tight">Publisher</p>
         </div>
-        <nav className="p-2 flex-1">
+        <nav className="p-3 flex-1 space-y-1">
           {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="block px-3 py-2 rounded hover:bg-gray-700 text-sm"
+              className="block px-3 py-3 rounded-lg text-base font-medium text-red-100/95 hover:bg-[#DC382D]/20 hover:text-white transition-colors"
             >
-              <span className="inline-flex items-center">
+              <span className="inline-flex items-center gap-1">
                 {item.label}
                 {"support" in item && item.support && <PublisherSupportIndicator initialHasNew={hasUnreadSupport} />}
               </span>
             </Link>
           ))}
         </nav>
-        <form action="/auth/signout" method="post" className="p-2 border-t border-gray-700">
+        <form action="/auth/signout" method="post" className="p-3 border-t border-red-950/90">
           <button
             type="submit"
-            className="w-full text-left px-3 py-2 rounded hover:bg-gray-700 text-sm"
+            className="w-full text-left px-3 py-3 rounded-lg text-base font-medium text-red-300/90 hover:bg-red-950/80 hover:text-white transition-colors"
           >
             Sign out
           </button>
         </form>
       </aside>
-      <main className="flex-1 p-6 bg-gray-50 overflow-auto">
+      <main className="flex-1 p-6 bg-stone-50 overflow-auto">
         <CurrencyProvider initialCurrency={initialCurrency}>
           <div className="flex items-center justify-end gap-4 mb-4">
             <CurrencyToggle />

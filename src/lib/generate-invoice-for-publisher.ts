@@ -3,7 +3,7 @@ import { buildInvoicePdf } from "@/lib/invoice-pdf";
 
 /**
  * Build PDF, storage upload, invoices + payouts rows for one publisher/month
- * using only imported daily_stats (is_estimated = false).
+ * using daily_stats for that month (estimated and/or non-estimated rows).
  */
 export async function generateInvoiceForPublisherMonth(
   supabase: SupabaseClient,
@@ -21,8 +21,7 @@ export async function generateInvoiceForPublisherMonth(
     .select("impressions, clicks, revenue")
     .eq("publisher_id", publisherId)
     .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", false);
+    .lte("stat_date", endDate);
 
   let impressions = 0;
   let clicks = 0;
@@ -37,7 +36,7 @@ export async function generateInvoiceForPublisherMonth(
     return {
       ok: false,
       message:
-        "No finalized traffic data for this month yet. You can create an invoice after your traffic report for that period is processed.",
+        "No daily stats with revenue for this month yet. Set a monthly target and generate estimates, or wait until data exists.",
     };
   }
 

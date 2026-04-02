@@ -29,23 +29,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Invalid month or year" }, { status: 400 });
   }
 
-  const { data: config } = await supabase
-    .from("monthly_config")
-    .select("real_data_imported_at")
-    .eq("month", monthNum)
-    .eq("year", yearNum)
-    .single();
-
-  if (!config?.real_data_imported_at) {
-    return NextResponse.json(
-      {
-        error:
-          "This report is not available yet. It will open once your monthly traffic data is finalized for this period.",
-      },
-      { status: 403 }
-    );
-  }
-
   const startDate = `${yearNum}-${String(monthNum).padStart(2, "0")}-01`;
   const endDate = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(new Date(yearNum, monthNum, 0).getDate()).padStart(2, "0")}`;
 
@@ -56,6 +39,16 @@ export async function GET(request: Request) {
     .gte("stat_date", startDate)
     .lte("stat_date", endDate)
     .order("stat_date");
+
+  if (!rawRows?.length) {
+    return NextResponse.json(
+      {
+        error:
+          "No daily stats for this month yet. Generate estimates from the admin Revenue & Payouts page when you have a monthly target.",
+      },
+      { status: 403 }
+    );
+  }
 
   const now = new Date();
   const rows = (rawRows ?? []).map((r) => {

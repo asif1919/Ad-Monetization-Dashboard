@@ -16,15 +16,25 @@ export async function GET() {
   const publisherId = profile?.publisher_id;
   if (!publisherId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { data: configs } = await supabase
-    .from("monthly_config")
-    .select("month, year")
-    .not("real_data_imported_at", "is", null)
-    .order("year", { ascending: false })
-    .order("month", { ascending: false })
-    .limit(24);
+  const { data: rows } = await supabase
+    .from("daily_stats")
+    .select("stat_date")
+    .eq("publisher_id", publisherId)
+    .order("stat_date", { ascending: false });
 
-  return NextResponse.json({
-    months: (configs ?? []).map((c) => ({ month: c.month, year: c.year })),
-  });
+  const ymSet = new Set<string>();
+  for (const r of rows ?? []) {
+    const d = String((r as { stat_date: string }).stat_date).slice(0, 10);
+    if (d.length >= 7) ymSet.add(d.slice(0, 7));
+  }
+
+  const months = [...ymSet]
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, 24)
+    .map((ym) => {
+      const [y, m] = ym.split("-").map(Number);
+      return { year: y, month: m };
+    });
+
+  return NextResponse.json({ months });
 }

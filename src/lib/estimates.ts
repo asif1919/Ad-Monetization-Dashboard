@@ -4,7 +4,6 @@ export type DailyEstimateRow = {
   impressions: number;
   clicks: number;
   revenue: number;
-  is_estimated: true;
 };
 
 /**
@@ -215,7 +214,6 @@ export function distributePublisherTargetRevenue(
       impressions,
       clicks,
       revenue,
-      is_estimated: true,
     });
   }
   return rows;

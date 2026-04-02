@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import {
-  buildPublisherMonthsWithRealStats,
-  invoiceMatchesRealStatsMonth,
+  buildPublisherMonthsWithDailyStats,
+  invoiceMatchesDailyStatsMonth,
   monthKey,
 } from "@/lib/invoice-real-months";
 import { currentAndPreviousCalendarMonthUtc } from "@/lib/invoice-month-window";
@@ -29,28 +29,27 @@ export async function GET() {
     .order("year", { ascending: false })
     .order("month", { ascending: false });
 
-  const { data: realRows } = await supabase
+  const { data: statRows } = await supabase
     .from("daily_stats")
     .select("publisher_id, stat_date")
-    .eq("publisher_id", publisherId)
-    .eq("is_estimated", false);
+    .eq("publisher_id", publisherId);
 
-  const realMonthsByPublisher = buildPublisherMonthsWithRealStats(
-    (realRows ?? []) as { publisher_id: string; stat_date: string }[]
+  const monthsByPublisher = buildPublisherMonthsWithDailyStats(
+    (statRows ?? []) as { publisher_id: string; stat_date: string }[]
   );
 
   const filtered = (invoices ?? []).filter((inv) =>
-    invoiceMatchesRealStatsMonth(
+    invoiceMatchesDailyStatsMonth(
       {
         publisher_id: publisherId,
         year: inv.year as number,
         month: inv.month as number,
       },
-      realMonthsByPublisher
+      monthsByPublisher
     )
   );
 
-  const months = realMonthsByPublisher.get(publisherId) ?? new Set<string>();
+  const months = monthsByPublisher.get(publisherId) ?? new Set<string>();
   const eligibilityByMonthKey: Record<string, boolean> = {};
   for (const { year, month } of currentAndPreviousCalendarMonthUtc()) {
     eligibilityByMonthKey[monthKey(year, month)] = months.has(monthKey(year, month));

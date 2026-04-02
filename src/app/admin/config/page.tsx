@@ -1,12 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import { ImportWizard } from "../import/import-wizard";
 import { FormattedMoney } from "@/components/currency/formatted-money";
 
 export default async function AdminConfigPage() {
   const supabase = await createClient();
   const { data: configs } = await supabase
     .from("monthly_config")
-    .select("id, month, year, expected_revenue, real_data_imported_at")
+    .select("id, month, year, expected_revenue")
     .order("year", { ascending: false })
     .order("month", { ascending: false });
 
@@ -17,7 +16,8 @@ export default async function AdminConfigPage() {
           Revenue configuration
         </h1>
         <p className="text-sm text-gray-700">
-          Use this page to manage monthly revenue estimates and real data imports.
+          View monthly revenue expectations. Targets and daily stats generation are managed under{" "}
+          <strong>Revenue &amp; Payouts</strong>.
         </p>
       </div>
 
@@ -30,7 +30,6 @@ export default async function AdminConfigPage() {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="text-left p-2">Month</th>
                   <th className="text-left p-2">Expected revenue</th>
-                  <th className="text-left p-2">Real data imported at</th>
                 </tr>
               </thead>
               <tbody>
@@ -46,11 +45,6 @@ export default async function AdminConfigPage() {
                         "—"
                       )}
                     </td>
-                    <td className="p-2 text-gray-600">
-                      {c.real_data_imported_at
-                        ? new Date(c.real_data_imported_at).toLocaleString()
-                        : "Not imported"}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -62,14 +56,6 @@ export default async function AdminConfigPage() {
           </p>
         )}
       </section>
-
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-medium text-gray-900 mb-3">
-          Import real data from Excel
-        </h2>
-        <ImportWizard configs={configs ?? []} />
-      </section>
     </div>
   );
 }
-

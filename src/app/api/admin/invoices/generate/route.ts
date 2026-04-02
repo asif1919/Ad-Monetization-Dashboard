@@ -47,8 +47,7 @@ export async function POST(request: Request) {
     .from("daily_stats")
     .select("publisher_id, impressions, clicks, revenue")
     .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", false);
+    .lte("stat_date", endDate);
 
   const byPublisher = new Map<
     string,
@@ -101,7 +100,7 @@ export async function POST(request: Request) {
       publisher_id,
       name: nameById.get(publisher_id) ?? null,
       reason:
-        "No imported daily stats for this month (invoices use imported report totals only, not projections).",
+        "No daily stats with revenue for this month (generate estimates from Revenue & Payouts, or add stats first).",
     }));
   }
 

@@ -60,7 +60,7 @@ export function InvoiceDownload() {
   }, [selectedPeriod]);
 
   const selectedMonthKey = monthKey(selectedMy.year, selectedMy.month);
-  const hasRealDataForSelected = eligibilityByMonthKey[selectedMonthKey] === true;
+  const hasStatsForSelected = eligibilityByMonthKey[selectedMonthKey] === true;
   const invoiceForSelected = useMemo(
     () => invoices.find((inv) => inv.month === selectedMy.month && inv.year === selectedMy.year),
     [invoices, selectedMy.month, selectedMy.year]
@@ -104,9 +104,9 @@ export function InvoiceDownload() {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <p className="text-sm text-gray-600 mb-3">
-        Your invoice is a <strong>PDF generated from finalized traffic data</strong> we have for you (imported
-        stats, not estimates). When that data exists for a month, you can build the PDF here and download it.
-        We only offer the <strong>current</strong> and <strong>previous</strong> calendar month (UTC).
+        Your invoice is a <strong>PDF built from your daily traffic stats</strong> for that month. When stats
+        exist for a month, you can generate the PDF here and download it. Only the <strong>current</strong> and{" "}
+        <strong>previous</strong> calendar month (UTC) are available.
       </p>
 
       <div className="flex flex-wrap items-end gap-2 mb-3 pb-4 border-b border-gray-100">
@@ -134,7 +134,7 @@ export function InvoiceDownload() {
         <button
           type="button"
           onClick={() => void generateInvoice()}
-          disabled={generating || !hasRealDataForSelected}
+          disabled={generating || !hasStatsForSelected}
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {generating ? "Building PDF…" : hasPdfForSelected ? "Regenerate PDF" : "Generate invoice PDF"}
@@ -142,16 +142,15 @@ export function InvoiceDownload() {
       </div>
 
       <p className="text-sm mb-4" aria-live="polite">
-        {!hasRealDataForSelected && (
+        {!hasStatsForSelected && (
           <span className="text-amber-800">
-            No finalized traffic data for this month yet — the invoice PDF cannot be created until that data is in
-            the system.
+            No daily stats for this month yet — the invoice PDF cannot be created until stats exist for that period.
           </span>
         )}
-        {hasRealDataForSelected && !hasPdfForSelected && (
-          <span className="text-green-800">Data for this month is ready — generate the PDF to download your invoice.</span>
+        {hasStatsForSelected && !hasPdfForSelected && (
+          <span className="text-green-800">Stats for this month are ready — generate the PDF to download your invoice.</span>
         )}
-        {hasRealDataForSelected && hasPdfForSelected && (
+        {hasStatsForSelected && hasPdfForSelected && (
           <span className="text-gray-700">
             PDF for this month is listed below — use <strong>Download PDF</strong>.
           </span>
@@ -193,7 +192,7 @@ export function InvoiceDownload() {
       </ul>
       {invoices.length === 0 && (
         <p className="text-gray-700 text-sm mt-2">
-          No PDFs yet. When finalized data exists for a month, generate the invoice above to add it here.
+          No PDFs yet. When daily stats exist for a month, generate the invoice above to add it here.
         </p>
       )}
     </div>

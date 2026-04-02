@@ -45,8 +45,8 @@ export function ReportDownload() {
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <h3 className="font-medium text-gray-900 mb-2">Download monthly report (CSV)</h3>
       <p className="text-sm text-gray-700 mb-3">
-        Monthly CSV downloads are available once that calendar month is finalized. There is no daily or weekly
-        export.
+        Download a CSV for any month where you have daily stats (including from generated estimates). There is no
+        daily or weekly export.
       </p>
       <div className="flex gap-2 items-center">
         <select

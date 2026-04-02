@@ -14,7 +14,7 @@ export default async function AdminOverviewPage() {
       supabase.from("publishers").select("*", { count: "exact", head: true }),
       supabase
         .from("monthly_config")
-        .select("month, year, expected_revenue, real_data_imported_at")
+        .select("month, year, expected_revenue")
         .order("year", { ascending: false })
         .order("month", { ascending: false })
         .limit(5),
@@ -113,7 +113,6 @@ export default async function AdminOverviewPage() {
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="text-left p-3">Month / Year</th>
               <th className="text-left p-3">Expected revenue</th>
-              <th className="text-left p-3">Real data imported</th>
             </tr>
           </thead>
           <tbody>
@@ -123,11 +122,6 @@ export default async function AdminOverviewPage() {
                   {c.month}/{c.year}
                 </td>
                 <td className="p-3"><FormattedMoney amountUsd={Number(c.expected_revenue)} /></td>
-                <td className="p-3">
-                  {c.real_data_imported_at
-                    ? new Date(c.real_data_imported_at).toLocaleDateString()
-                    : "—"}
-                </td>
               </tr>
             ))}
           </tbody>

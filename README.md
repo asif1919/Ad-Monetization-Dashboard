@@ -1,6 +1,6 @@
 # Ad Monetization Dashboard (Publisher Ad Revenue Platform)
 
-Two-layer ad monetization platform: **Super Admin** manages publishers and imports month-end Excel reports; **Publishers** view performance, earnings, and download monthly reports and PDF invoices.
+Two-layer ad monetization platform: **Super Admin** manages publishers, monthly targets, and estimated daily stats; **Publishers** view performance, earnings, and download monthly reports and PDF invoices.
 
 ## Stack
 
@@ -22,7 +22,7 @@ Two-layer ad monetization platform: **Super Admin** manages publishers and impor
    - `00002_rls.sql`
    - `00003_profile_trigger.sql`
    - `00004_storage.sql`  
-   Ensure the `excel-imports` and `invoices` storage buckets exist (the last migration may create them).
+   Ensure the `invoices` storage bucket exists (for PDF invoices; the migration may create it). An `excel-imports` bucket may exist from older migrations but is unused if you are not using legacy import tooling.
 
 4. **First Super Admin**  
    After signing up a user, set them as super admin and (optionally) link publishers:

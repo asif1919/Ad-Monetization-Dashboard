@@ -15,7 +15,7 @@ type SkippedRow = {
   reason: string;
 };
 
-/** Batch-creates invoice PDFs + invoice/payout rows for this month for every publisher with imported stats who does not have an invoice yet (admin backfill). */
+/** Batch-creates invoice PDFs + invoice/payout rows for publishers with daily stats and no invoice yet this month. */
 export function GenerateInvoicesButton({ month, year }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -63,8 +63,8 @@ export function GenerateInvoicesButton({ month, year }: Props) {
         {loading ? "Generating…" : `Create missing invoices for ${month}/${year}`}
       </button>
       <p className="text-xs text-gray-500 leading-snug">
-        Optional: runs after you import traffic. Use this to batch-create PDFs for publishers who did not create
-        their own. Already-existing invoices for this month are left as-is.
+        Optional: use after daily stats exist for this month (including estimates). Batch-creates PDFs for publishers
+        who did not create their own. Existing invoices for this month are left as-is.
       </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
       {lastResult && !error && (
@@ -76,7 +76,7 @@ export function GenerateInvoicesButton({ month, year }: Props) {
             <div className="mt-2">
               <p className="text-amber-900 font-medium text-xs">
                 Skipped {lastResult.skipped.length} publisher
-                {lastResult.skipped.length === 1 ? "" : "s"} (no imported daily stats for this month):
+                {lastResult.skipped.length === 1 ? "" : "s"} (no daily stats with revenue for this month):
               </p>
               <ul className="mt-1 list-disc list-inside text-xs text-gray-700 max-h-40 overflow-y-auto space-y-0.5">
                 {lastResult.skipped.map((s) => (

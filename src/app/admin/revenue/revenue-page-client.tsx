@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { UploadReportModal } from "./upload-report-modal";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import {
   getFirstActiveStatDayInMonth,
   resolvePublisherStatRange,
@@ -16,8 +15,7 @@ type TargetRow = {
   created_at?: string;
   target_revenue: number;
   target_id: string | null;
-  upload_status?: "pending" | "uploaded" | "failed";
-  estimate_status?: "none" | "generated" | "skipped_real_data";
+  estimate_status?: "none" | "generated";
 };
 
 function daysInMonth(year: number, month: number) {
@@ -51,11 +49,9 @@ function RevenuePageClientInner({
   initialYear: number;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [month, setMonth] = useState(initialMonth);
   const [year, setYear] = useState(initialYear);
   const [targets, setTargets] = useState<TargetRow[]>([]);
-  const [realDataImportedAt, setRealDataImportedAt] = useState<string | null>(null);
   const [loadingTargets, setLoadingTargets] = useState(true);
   const [estimateLoading, setEstimateLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -63,8 +59,6 @@ function RevenuePageClientInner({
   const [estimateModal, setEstimateModal] = useState<
     null | { row: TargetRow; startDay: number; endDay: number }
   >(null);
-  const [uploadModal, setUploadModal] = useState<TargetRow | null>(null);
-  const openedUploadFromUrlRef = useRef(false);
 
   const loadTargets = useCallback(async () => {
     setLoadingTargets(true);
@@ -75,7 +69,6 @@ function RevenuePageClientInner({
       const data = await res.json();
       if (res.ok) {
         setTargets(data.targets ?? []);
-        setRealDataImportedAt(data.real_data_imported_at ?? null);
         setEditTargets({});
       }
     } finally {
@@ -86,30 +79,6 @@ function RevenuePageClientInner({
   useEffect(() => {
     loadTargets();
   }, [loadTargets]);
-
-  const uploadFromUrl = searchParams.get("upload");
-  useEffect(() => {
-    if (
-      openedUploadFromUrlRef.current ||
-      !uploadFromUrl ||
-      loadingTargets ||
-      targets.length === 0
-    ) {
-      return;
-    }
-    const row = targets.find((t) => t.publisher_id === uploadFromUrl);
-    if (row) {
-      openedUploadFromUrlRef.current = true;
-      setUploadModal(row);
-      const next = new URLSearchParams(searchParams.toString());
-      next.delete("upload");
-      const q = next.toString();
-      router.replace(
-        q ? `/admin/revenue?${q}` : "/admin/revenue",
-        { scroll: false }
-      );
-    }
-  }, [uploadFromUrl, loadingTargets, targets, searchParams, router]);
 
   async function saveTarget(publisherId: string, value: string) {
     const num = parseFloat(value);
@@ -262,8 +231,6 @@ function RevenuePageClientInner({
                   <th className="text-left p-3">Email</th>
                   <th className="text-left p-3">Report ID</th>
                   <th className="text-left p-3">Monthly target (USD)</th>
-                  <th className="text-left p-3">Upload report</th>
-                  <th className="text-left p-3">Upload status</th>
                   <th className="text-left p-3">Estimate</th>
                   <th className="text-left p-3">Estimate status</th>
                 </tr>
@@ -276,11 +243,9 @@ function RevenuePageClientInner({
                       ? Number(editedTarget)
                       : Number(t.target_revenue);
                   const generateDisabledReason =
-                    t.estimate_status === "skipped_real_data"
-                      ? "Disabled: real data is already imported for this month."
-                      : !Number.isFinite(effectiveTargetRevenue) || effectiveTargetRevenue <= 0
-                        ? "Disabled: monthly target must be greater than 0."
-                        : null;
+                    !Number.isFinite(effectiveTargetRevenue) || effectiveTargetRevenue <= 0
+                      ? "Disabled: monthly target must be greater than 0."
+                      : null;
 
                   return (
                   <tr key={t.publisher_id} className="border-b border-gray-100">
@@ -318,32 +283,6 @@ function RevenuePageClientInner({
                     <td className="p-3">
                       <button
                         type="button"
-                        className="text-blue-600 hover:underline text-xs"
-                        onClick={() => setUploadModal(t)}
-                      >
-                        Upload report
-                      </button>
-                    </td>
-                    <td className="p-3 text-xs">
-                      {t.upload_status === "uploaded" && (
-                        <span className="inline-flex rounded-full bg-green-50 px-2 py-0.5 text-green-700">
-                          Uploaded
-                        </span>
-                      )}
-                      {t.upload_status === "failed" && (
-                        <span className="inline-flex rounded-full bg-red-50 px-2 py-0.5 text-red-700">
-                          Failed
-                        </span>
-                      )}
-                      {(!t.upload_status || t.upload_status === "pending") && (
-                        <span className="inline-flex rounded-full bg-gray-50 px-2 py-0.5 text-gray-700">
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <button
-                        type="button"
                         className="text-blue-600 hover:underline text-xs disabled:opacity-50"
                         disabled={!!generateDisabledReason}
                         title={generateDisabledReason ?? "Generate estimate"}
@@ -359,8 +298,6 @@ function RevenuePageClientInner({
                     </td>
                     <td className="p-3 text-xs text-gray-700">
                       {t.estimate_status === "generated" && "Generated"}
-                      {t.estimate_status === "skipped_real_data" &&
-                        "Skipped (real data imported)"}
                       {(!t.estimate_status || t.estimate_status === "none") &&
                         "Not generated"}
                     </td>
@@ -372,22 +309,6 @@ function RevenuePageClientInner({
           </div>
         )}
       </section>
-
-      {uploadModal && (
-        <UploadReportModal
-          open={!!uploadModal}
-          onClose={() => setUploadModal(null)}
-          onSuccess={() => {
-            void loadTargets();
-            router.refresh();
-          }}
-          publisherId={uploadModal.publisher_id}
-          publisherName={uploadModal.name}
-          publicId={uploadModal.public_id ?? null}
-          month={month}
-          year={year}
-        />
-      )}
 
       {estimateModal && (
         <div

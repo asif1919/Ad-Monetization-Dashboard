@@ -44,8 +44,6 @@ export async function POST(request: Request) {
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
 
-  const daysInMonth = new Date(year, month, 0).getDate();
-
   const { data: targets } = await supabase
     .from("publisher_monthly_targets")
     .select("publisher_id, target_revenue")
@@ -60,25 +58,11 @@ export async function POST(request: Request) {
     (publishersMeta ?? []).map((p) => [p.id as string, p.created_at as string])
   );
 
-  // Find publishers that already have real data for this month so we don't
-  // overwrite them with new estimates.
-  const { data: realStats } = await supabase
-    .from("daily_stats")
-    .select("publisher_id")
-    .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", false);
-
-  const publishersWithRealData = new Set(
-    (realStats ?? []).map((r: any) => r.publisher_id as string)
-  );
-
   await supabase
     .from("daily_stats")
     .delete()
     .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", true);
+    .lte("stat_date", endDate);
 
   const toInsert: {
     stat_date: string;
@@ -86,14 +70,12 @@ export async function POST(request: Request) {
     impressions: number;
     clicks: number;
     revenue: number;
-    is_estimated: boolean;
     time_segments: ReturnType<typeof buildTimeSegments>;
   }[] = [];
 
   for (const t of targets ?? []) {
     const amount = Number(t.target_revenue);
     if (amount <= 0) continue;
-    if (publishersWithRealData.has(t.publisher_id)) continue;
     const range = resolvePublisherStatRange(
       createdAtByPublisher.get(t.publisher_id),
       year,
@@ -122,7 +104,6 @@ export async function POST(request: Request) {
         impressions: r.impressions,
         clicks: r.clicks,
         revenue: r.revenue,
-        is_estimated: true,
         time_segments,
       });
     }

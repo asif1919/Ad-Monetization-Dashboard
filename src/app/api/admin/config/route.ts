@@ -48,7 +48,6 @@ export async function POST(request: Request) {
         month,
         year,
         expected_revenue,
-        real_data_imported_at: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "month,year" }
@@ -88,8 +87,7 @@ export async function POST(request: Request) {
     .from("daily_stats")
     .delete()
     .gte("stat_date", startDate)
-    .lte("stat_date", endDate)
-    .eq("is_estimated", true);
+    .lte("stat_date", endDate);
 
   // Insert new estimated daily_stats
   const toInsert = rows.map((r) => ({
@@ -98,7 +96,6 @@ export async function POST(request: Request) {
     impressions: r.impressions,
     clicks: 0,
     revenue: r.revenue,
-    is_estimated: true,
   }));
 
   if (toInsert.length > 0) {
