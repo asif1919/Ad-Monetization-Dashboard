@@ -1,3 +1,4 @@
+import { authDebug } from "@/lib/auth-debug";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -13,7 +14,15 @@ export async function POST() {
     error,
   } = await supabase.auth.getUser();
 
+  authDebug("refresh", {
+    hasUser: !!user,
+    userId: user?.id ?? null,
+    error: error?.message ?? null,
+    code: (error as { code?: string } | null)?.code ?? null,
+  });
+
   if (error || !user) {
+    authDebug("refresh", { step: "signOutAnd401", error: error?.message ?? "no_session" });
     // Stale or missing refresh token — clear cookies so client stops retrying
     await supabase.auth.signOut();
     return NextResponse.json(

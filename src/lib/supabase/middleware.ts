@@ -1,3 +1,4 @@
+import { authDebug } from "@/lib/auth-debug";
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -32,6 +33,16 @@ export async function updateSession(request: NextRequest) {
   const hasValidSession = !userError && !!user;
 
   const pathname = request.nextUrl.pathname;
+  const cookieNames = request.cookies.getAll().map((c) => c.name);
+
+  authDebug("middleware", {
+    pathname,
+    hasUser: !!user,
+    userId: user?.id ?? null,
+    getUserError: userError?.message ?? null,
+    getUserCode: (userError as { code?: string } | null)?.code ?? null,
+    cookieNames,
+  });
 
   if (!hasValidSession) {
     if (
@@ -39,6 +50,11 @@ export async function updateSession(request: NextRequest) {
       pathname.startsWith("/admin") ||
       pathname.startsWith("/dashboard")
     ) {
+      authDebug("middleware", {
+        step: "redirectLogin",
+        pathname,
+        reason: userError?.message ?? "no_user",
+      });
       return NextResponse.redirect(new URL("/login", request.url));
     }
   }

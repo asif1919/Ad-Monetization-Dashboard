@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireDashboardPublisherForApi } from "@/lib/dashboard-effective-publisher";
 import { NextResponse } from "next/server";
 
 export async function POST(
@@ -7,18 +8,9 @@ export async function POST(
 ) {
   const { id: ticketId } = await params;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("publisher_id")
-    .eq("id", user.id)
-    .single();
-  const publisherId = profile?.publisher_id;
-  if (!publisherId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await requireDashboardPublisherForApi(supabase);
+  if ("response" in scope) return scope.response;
+  const { publisherId } = scope;
 
   const { data: ticket } = await supabase
     .from("support_tickets")

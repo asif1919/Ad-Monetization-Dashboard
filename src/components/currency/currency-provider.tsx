@@ -29,9 +29,12 @@ export const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
 export function CurrencyProvider({
   initialCurrency,
+  persistCurrency = true,
   children,
 }: {
   initialCurrency: SupportedCurrency;
+  /** When false (e.g. admin view-as), display toggle works locally but does not PATCH /api/user/currency. */
+  persistCurrency?: boolean;
   children: React.ReactNode;
 }) {
   const [currency, setCurrencyState] = useState<SupportedCurrency>(initialCurrency);
@@ -66,17 +69,21 @@ export function CurrencyProvider({
     if (currency === "BDT") fetchRate();
   }, [currency, fetchRate]);
 
-  const setCurrency = useCallback((c: SupportedCurrency) => {
-    setCurrencyState(c);
-    setSavingCurrency(true);
-    fetch("/api/user/currency", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ preferred_currency: c }),
-    })
-      .catch(() => {})
-      .finally(() => setSavingCurrency(false));
-  }, []);
+  const setCurrency = useCallback(
+    (c: SupportedCurrency) => {
+      setCurrencyState(c);
+      if (!persistCurrency) return;
+      setSavingCurrency(true);
+      fetch("/api/user/currency", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferred_currency: c }),
+      })
+        .catch(() => {})
+        .finally(() => setSavingCurrency(false));
+    },
+    [persistCurrency]
+  );
 
   const formatMoney = useCallback(
     (amountUsd: number) =>

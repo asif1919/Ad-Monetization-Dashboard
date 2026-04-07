@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireDashboardPublisherForApi } from "@/lib/dashboard-effective-publisher";
 import { NextResponse } from "next/server";
 
 type DayRow = {
@@ -13,18 +14,9 @@ type DayRow = {
 
 export async function GET(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("publisher_id")
-    .eq("id", user.id)
-    .single();
-  const publisherId = profile?.publisher_id;
-  if (!publisherId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await requireDashboardPublisherForApi(supabase);
+  if ("response" in scope) return scope.response;
+  const { publisherId } = scope;
 
   const { searchParams } = new URL(request.url);
   const monthParam = searchParams.get("month"); // YYYY-MM

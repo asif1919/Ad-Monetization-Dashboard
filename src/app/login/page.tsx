@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/toast-provider";
 import { mapAuthError } from "@/lib/errors/auth";
+import { authDebug } from "@/lib/auth-debug";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const [sessionExpired, setSessionExpired] = useState(false);
   const supabase = createClient();
 
@@ -26,23 +25,44 @@ export default function LoginPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const { error: err } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error: err } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     setLoading(false);
     if (err) {
+      authDebug("login", {
+        step: "signInError",
+        message: err.message,
+        code: (err as { code?: string }).code,
+      });
       const friendly = mapAuthError(err.message);
       setError(friendly);
       return;
+    }
+    authDebug("login", {
+      step: "signInSuccess",
+      userId: signInData.user?.id,
+      sessionExpiresAt: signInData.session?.expires_at,
+    });
+    if (typeof document !== "undefined") {
+      const names = document.cookie
+        .split(";")
+        .map((c) => c.split("=")[0]?.trim())
+        .filter(Boolean);
+      authDebug("login", { step: "browserCookieNamesAfterSignIn", names });
     }
     show({
       type: "success",
       title: "Welcome back!",
       description: "You\u2019re now signed in.",
     });
-    router.refresh();
-    router.push("/");
+    // Full navigation so session cookies are included on the next request. Client-side
+    // router.push can race middleware / AuthRefresh and look "logged out" briefly.
+    setTimeout(() => {
+      authDebug("login", { step: "navigatingToHome", href: "/" });
+      window.location.assign("/");
+    }, 150);
   }
 
   return (

@@ -1,5 +1,6 @@
 "use client";
 
+import { authDebug } from "@/lib/auth-debug";
 import { createClient } from "@/lib/supabase/client";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -15,8 +16,21 @@ function isProtectedPath(pathname: string) {
 }
 
 async function refreshSession() {
-  const res = await fetch("/api/auth/refresh", { method: "POST" });
+  const attempt = async () =>
+    fetch("/api/auth/refresh", { method: "POST", credentials: "same-origin" });
+
+  let res = await attempt();
+  authDebug("authRefresh", { step: "firstAttempt", status: res.status });
+  // After sign-in, cookies can lag one tick behind client navigation; retry once before signing out.
   if (res.status === 401) {
+    authDebug("authRefresh", { step: "retryAfter401", delayMs: 400 });
+    await new Promise((r) => setTimeout(r, 400));
+    res = await attempt();
+    authDebug("authRefresh", { step: "secondAttempt", status: res.status });
+  }
+
+  if (res.status === 401) {
+    authDebug("authRefresh", { step: "signOutRedirectLogin", status: res.status });
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.assign("/login?reason=session");
@@ -30,6 +44,7 @@ export function AuthRefresh() {
   useEffect(() => {
     if (!pathname || !isProtectedPath(pathname)) return;
 
+    authDebug("authRefresh", { step: "mountRefresh", pathname });
     void refreshSession();
 
     intervalRef.current = setInterval(() => void refreshSession(), REFRESH_INTERVAL_MS);

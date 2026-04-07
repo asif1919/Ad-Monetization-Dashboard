@@ -1,14 +1,21 @@
+import { resolveDashboardPublisher } from "@/lib/dashboard-effective-publisher";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import type { PreferredCurrency } from "@/lib/supabase/types";
 
 export async function PATCH(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const dash = await resolveDashboardPublisher(supabase);
+  if (!dash.ok) {
+    const status = dash.redirectTo === "/login" ? 401 : 403;
+    return NextResponse.json({ error: "Unauthorized" }, { status });
+  }
+  if (dash.viewAs) {
+    return NextResponse.json(
+      { error: "Currency preference cannot be changed while viewing as publisher" },
+      { status: 403 }
+    );
+  }
 
   let body: { preferred_currency?: string };
   try {
@@ -27,7 +34,7 @@ export async function PATCH(request: Request) {
   const { error } = await supabase
     .from("profiles")
     .update({ preferred_currency: currency as PreferredCurrency })
-    .eq("id", user.id);
+    .eq("id", dash.user.id);
 
   if (error) {
     // Column may not exist yet (migration not run); still return success so UI state stays in sync

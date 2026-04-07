@@ -1,3 +1,4 @@
+import { resolveDashboardPublisher } from "@/lib/dashboard-effective-publisher";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ReportsTable } from "./reports-table";
@@ -10,18 +11,9 @@ export default async function ReportsPage({
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("publisher_id")
-    .eq("id", user.id)
-    .single();
-  const publisherId = profile?.publisher_id;
-  if (!publisherId) redirect("/login");
+  const dash = await resolveDashboardPublisher(supabase);
+  if (!dash.ok) redirect(dash.redirectTo);
+  const { publisherId } = dash;
 
   const { from, to } = await searchParams;
   const nowLocal = new Date();

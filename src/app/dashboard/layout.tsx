@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import { resolveDashboardPublisher } from "@/lib/dashboard-effective-publisher";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { PublisherSupportIndicator } from "@/components/publisher-support-indicator";
 import { CurrencyProvider } from "@/components/currency/currency-provider";
 import { CurrencyToggle } from "@/components/currency/currency-toggle";
+import { ViewAsPublisherBanner } from "@/components/view-as-publisher-banner";
 
 export default async function DashboardLayout({
   children,
@@ -11,47 +13,44 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  let { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("role, publisher_id, preferred_currency")
-    .eq("id", user.id)
-    .single();
-
-  if (profileError) {
-    const { data: fallback } = await supabase
-      .from("profiles")
-      .select("role, publisher_id, preferred_currency")
-      .eq("id", user.id)
-      .single();
-    profile = fallback ?? null;
+  const resolved = await resolveDashboardPublisher(supabase);
+  if (!resolved.ok) {
+    redirect(resolved.redirectTo);
   }
 
-  if (profile?.role === "super_admin") redirect("/admin");
-  if (!profile?.publisher_id && user.email) {
+  const { publisherId, viewAs } = resolved;
+
+  let initialCurrency: "USD" | "BDT" = "USD";
+  if (viewAs) {
+    const { data: pubProfile } = await supabase
+      .from("profiles")
+      .select("preferred_currency")
+      .eq("publisher_id", publisherId)
+      .eq("role", "publisher")
+      .maybeSingle();
+    initialCurrency = pubProfile?.preferred_currency === "BDT" ? "BDT" : "USD";
+  } else {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("preferred_currency")
+      .eq("id", resolved.user.id)
+      .single();
+    initialCurrency =
+      profile && "preferred_currency" in profile && profile.preferred_currency === "BDT"
+        ? "BDT"
+        : "USD";
+  }
+
+  let publisherDisplayName = "Publisher";
+  if (viewAs) {
     const { data: pub } = await supabase
       .from("publishers")
-      .select("id")
-      .eq("email", user.email)
+      .select("name")
+      .eq("id", publisherId)
       .maybeSingle();
-    if (pub) {
-      await supabase.from("profiles").update({ publisher_id: pub.id }).eq("id", user.id);
-      profile = { ...profile, publisher_id: pub.id } as typeof profile;
-    }
+    if (pub?.name) publisherDisplayName = pub.name as string;
   }
-  if (!profile?.publisher_id) redirect("/login");
 
-  const publisherId = profile.publisher_id;
-  const initialCurrency =
-    profile && "preferred_currency" in profile && profile.preferred_currency === "BDT"
-      ? "BDT"
-      : "USD";
-
-  // Check if there are any unread admin messages for this publisher
   const { data: ticketsWithMessages } = await supabase
     .from("support_tickets")
     .select(
@@ -103,7 +102,9 @@ export default async function DashboardLayout({
             >
               <span className="inline-flex items-center gap-1">
                 {item.label}
-                {"support" in item && item.support && <PublisherSupportIndicator initialHasNew={hasUnreadSupport} />}
+                {"support" in item && item.support && (
+                  <PublisherSupportIndicator initialHasNew={hasUnreadSupport} />
+                )}
               </span>
             </Link>
           ))}
@@ -118,7 +119,11 @@ export default async function DashboardLayout({
         </form>
       </aside>
       <main className="flex-1 p-6 bg-stone-50 overflow-auto">
-        <CurrencyProvider initialCurrency={initialCurrency}>
+        <CurrencyProvider
+          initialCurrency={initialCurrency}
+          persistCurrency={!viewAs}
+        >
+          {viewAs && <ViewAsPublisherBanner publisherName={publisherDisplayName} />}
           <div className="flex items-center justify-end gap-4 mb-4">
             <CurrencyToggle />
           </div>

@@ -1,3 +1,4 @@
+import { resolveDashboardPublisher } from "@/lib/dashboard-effective-publisher";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { OverviewCards } from "./overview-cards";
@@ -10,18 +11,9 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardOverviewPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("publisher_id")
-    .eq("id", user.id)
-    .single();
-  const publisherId = profile?.publisher_id;
-  if (!publisherId) redirect("/login");
+  const dash = await resolveDashboardPublisher(supabase);
+  if (!dash.ok) redirect(dash.redirectTo);
+  const { publisherId } = dash;
 
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
