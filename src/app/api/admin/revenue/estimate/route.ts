@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { runPublisherEstimate } from "@/lib/run-publisher-estimate";
 import { NextResponse } from "next/server";
 import {
   distributePublisherTargetRevenue,
@@ -22,12 +23,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { month, year, start_day, end_day } = body as {
+  const { month, year, start_day, end_day, preserve_first_n_days } = body as {
     month?: number;
     year?: number;
-    /** Applied per publisher with join-date rules (see resolvePublisherStatRange) */
     start_day?: number | null;
     end_day?: number | null;
+    preserve_first_n_days?: number | null;
   };
   if (
     typeof month !== "number" ||
@@ -41,6 +42,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const preserve =
+    preserve_first_n_days != null && !Number.isNaN(Number(preserve_first_n_days))
+      ? Math.floor(Number(preserve_first_n_days))
+      : 0;
+
   const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
   const endDate = `${year}-${String(month).padStart(2, "0")}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
 
@@ -49,6 +55,35 @@ export async function POST(request: Request) {
     .select("publisher_id, target_revenue")
     .eq("month", month)
     .eq("year", year);
+
+  if (preserve > 0) {
+    let insertedTotal = 0;
+    for (const t of targets ?? []) {
+      const result = await runPublisherEstimate(supabase, {
+        publisher_id: t.publisher_id as string,
+        month,
+        year,
+        start_day,
+        end_day,
+        preserve_first_n_days: preserve,
+      });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: result.error, code: result.code },
+          { status: result.status }
+        );
+      }
+      if (result.ok && !result.skipped) {
+        insertedTotal += result.inserted_count;
+      }
+    }
+    return NextResponse.json({
+      ok: true,
+      mode: "partial",
+      rows: insertedTotal,
+      preserve_first_n_days: preserve,
+    });
+  }
 
   const { data: publishersMeta } = await supabase
     .from("publishers")
@@ -114,5 +149,5 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, rows: toInsert.length });
+  return NextResponse.json({ ok: true, mode: "full", rows: toInsert.length });
 }

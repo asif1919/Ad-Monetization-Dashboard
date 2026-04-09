@@ -32,6 +32,11 @@ export async function updateSession(request: NextRequest) {
 
   const hasValidSession = !userError && !!user;
 
+  const isStaleRefresh =
+    !!userError &&
+    ((userError as { code?: string }).code === "refresh_token_not_found" ||
+      userError.message?.includes("Refresh Token Not Found"));
+
   const pathname = request.nextUrl.pathname;
   const cookieNames = request.cookies.getAll().map((c) => c.name);
 
@@ -44,6 +49,21 @@ export async function updateSession(request: NextRequest) {
     cookieNames,
   });
 
+  /** Clear broken Supabase session cookies so the client stops sending an invalid token on every request. */
+  function clearStaleSupabaseCookies(res: NextResponse) {
+    const secure = process.env.NODE_ENV === "production";
+    for (const c of request.cookies.getAll()) {
+      if (c.name.startsWith("sb-")) {
+        res.cookies.set(c.name, "", {
+          path: "/",
+          maxAge: 0,
+          sameSite: "lax",
+          secure,
+        });
+      }
+    }
+  }
+
   if (!hasValidSession) {
     if (
       pathname === "/" ||
@@ -54,9 +74,18 @@ export async function updateSession(request: NextRequest) {
         step: "redirectLogin",
         pathname,
         reason: userError?.message ?? "no_user",
+        clearedStaleSession: isStaleRefresh,
       });
-      return NextResponse.redirect(new URL("/login", request.url));
+      const redirect = NextResponse.redirect(new URL("/login", request.url));
+      if (isStaleRefresh) {
+        clearStaleSupabaseCookies(redirect);
+      }
+      return redirect;
     }
+  }
+
+  if (isStaleRefresh) {
+    clearStaleSupabaseCookies(response);
   }
 
   return response;

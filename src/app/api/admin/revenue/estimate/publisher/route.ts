@@ -1,10 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { runPublisherEstimate } from "@/lib/run-publisher-estimate";
 import { NextResponse } from "next/server";
-import {
-  distributePublisherTargetRevenue,
-  resolvePublisherStatRange,
-} from "@/lib/estimates";
-import { buildTimeSegments } from "@/lib/time-segments";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -22,14 +18,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await request.json();
-  const { publisher_id, month, year, start_day, end_day } = body as {
-    publisher_id?: string;
-    month?: number;
-    year?: number;
-    /** Optional inclusive day-of-month overrides (1–31) */
-    start_day?: number | null;
-    end_day?: number | null;
-  };
+  const { publisher_id, month, year, start_day, end_day, preserve_first_n_days } =
+    body as {
+      publisher_id?: string;
+      month?: number;
+      year?: number;
+      start_day?: number | null;
+      end_day?: number | null;
+      preserve_first_n_days?: number | null;
+    };
   if (
     !publisher_id ||
     typeof publisher_id !== "string" ||
@@ -44,51 +41,39 @@ export async function POST(request: Request) {
     );
   }
 
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-  const endDate = `${year}-${String(month).padStart(
-    2,
-    "0"
-  )}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
+  console.log("[api/estimate/publisher] POST", {
+    publisher_id: `${publisher_id.slice(0, 8)}…`,
+    month,
+    year,
+    start_day,
+    end_day,
+    preserve_first_n_days,
+  });
 
-  const { data: target } = await supabase
-    .from("publisher_monthly_targets")
-    .select("target_revenue")
-    .eq("publisher_id", publisher_id)
-    .eq("month", month)
-    .eq("year", year)
-    .maybeSingle();
+  const result = await runPublisherEstimate(supabase, {
+    publisher_id,
+    month,
+    year,
+    start_day,
+    end_day,
+    preserve_first_n_days,
+  });
 
-  const amount = target ? Number(target.target_revenue) : 0;
-  if (!target || amount <= 0) {
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error, code: result.code },
+      { status: result.status }
+    );
+  }
+
+  if (result.skipped && result.reason === "no_target") {
     return NextResponse.json({
       skipped: true,
       reason: "no_target",
     });
   }
 
-  const { data: pub } = await supabase
-    .from("publishers")
-    .select("created_at")
-    .eq("id", publisher_id)
-    .maybeSingle();
-
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const range = resolvePublisherStatRange(
-    pub?.created_at as string | undefined,
-    year,
-    month,
-    start_day,
-    end_day
-  );
-
-  await supabase
-    .from("daily_stats")
-    .delete()
-    .eq("publisher_id", publisher_id)
-    .gte("stat_date", startDate)
-    .lte("stat_date", endDate);
-
-  if (!range) {
+  if (result.skipped && result.reason === "publisher_not_active_this_month") {
     return NextResponse.json({
       skipped: true,
       reason: "publisher_not_active_this_month",
@@ -96,39 +81,13 @@ export async function POST(request: Request) {
     });
   }
 
-  const rows = distributePublisherTargetRevenue(publisher_id, amount, year, month, {
-    firstActiveDay: range.first,
-    lastActiveDay: range.last,
-  });
-  const toInsert = rows.map((r) => {
-    const time_segments = buildTimeSegments(
-      r.revenue,
-      r.impressions,
-      r.clicks,
-      r.stat_date
-    );
-    return {
-      stat_date: r.stat_date,
-      publisher_id: r.publisher_id,
-      impressions: r.impressions,
-      clicks: r.clicks,
-      revenue: r.revenue,
-      time_segments,
-    };
-  });
-
-  if (toInsert.length > 0) {
-    const { error } = await supabase.from("daily_stats").insert(toInsert);
-    if (error)
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-  }
-
   return NextResponse.json({
     skipped: false,
-    inserted_count: toInsert.length,
+    inserted_count: result.inserted_count,
+    mode: result.mode,
+    frozen_sum: result.frozen_sum,
+    remaining: result.remaining,
+    tail_start_day: result.tail_start_day,
+    tail_end_day: result.tail_end_day,
   });
 }
-
